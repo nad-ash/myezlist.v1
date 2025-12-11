@@ -1,0 +1,251 @@
+
+import React, { useState, useEffect } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const categories = [
+  { value: "home", label: "Home", icon: "🏠" },
+  { value: "work", label: "Work", icon: "💼" },
+  { value: "personal", label: "Personal", icon: "✨" },
+  { value: "errands", label: "Errands", icon: "🛒" },
+  { value: "family", label: "Family", icon: "👨‍👩‍👧‍👦" },
+  { value: "health", label: "Health", icon: "💪" },
+  { value: "finance", label: "Finance", icon: "💰" },
+  { value: "other", label: "Other", icon: "📌" },
+];
+
+const priorities = [
+  { value: "low", label: "Low Priority", icon: "🌱" },
+  { value: "medium", label: "Medium Priority", icon: "⚡" },
+  { value: "high", label: "High Priority", icon: "🔥" },
+];
+
+const statuses = [
+  { value: "pending", label: "Pending" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "completed", label: "Completed" },
+];
+
+export default function AddTodoDialog({ open, onClose, onSave, editTodo = null }) {
+  const [todo, setTodo] = useState({
+    title: "",
+    description: "",
+    status: "pending",
+    priority: "medium",
+    category: "personal",
+    due_date: "",
+    due_time: "", // Added due_time field
+  });
+
+  useEffect(() => {
+    if (editTodo) {
+      setTodo({
+        title: editTodo.title || "",
+        description: editTodo.description || "",
+        status: editTodo.status || "pending",
+        priority: editTodo.priority || "medium",
+        category: editTodo.category || "personal",
+        due_date: editTodo.due_date || "",
+        due_time: editTodo.due_time || "", // Added due_time field
+      });
+    } else {
+      resetForm();
+    }
+  }, [editTodo, open]);
+
+  const handleSave = () => {
+    if (todo.title.trim()) {
+      onSave(todo);
+      resetForm();
+    }
+  };
+
+  const resetForm = () => {
+    setTodo({
+      title: "",
+      description: "",
+      status: "pending",
+      priority: "medium",
+      category: "personal",
+      due_date: "",
+      due_time: "", // Added due_time field
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) {
+        resetForm();
+      }
+      onClose();
+    }}>
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-xl bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            {editTodo ? "Edit Task" : "Add New Task"}
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="title">Task Title *</Label>
+            <Input
+              id="title"
+              placeholder="What needs to be done?"
+              value={todo.title}
+              onChange={(e) => setTodo({ ...todo, title: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+              maxLength={100}
+              className="text-base"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Description (Optional)</Label>
+            <Textarea
+              id="description"
+              placeholder="Add more details..."
+              value={todo.description}
+              onChange={(e) => setTodo({ ...todo, description: e.target.value })}
+              rows={3}
+              maxLength={2000}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="category">Category</Label>
+              <Select
+                value={todo.category}
+                onValueChange={(value) => setTodo({ ...todo, category: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      {cat.icon} {cat.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="priority">Priority</Label>
+              <Select
+                value={todo.priority}
+                onValueChange={(value) => setTodo({ ...todo, priority: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {priorities.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {p.icon} {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {editTodo && (
+            <div className="space-y-2">
+              <Label htmlFor="status">Status</Label>
+              <Select
+                value={todo.status}
+                onValueChange={(value) => setTodo({ ...todo, status: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {statuses.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Due Date & Time (Optional)</Label> {/* Updated label */}
+            <div className="grid grid-cols-2 gap-2"> {/* Grid for date and time inputs */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal", // Added w-full for consistent sizing
+                      !todo.due_date && "text-slate-500"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {todo.due_date ? format(new Date(todo.due_date), 'MMM d') : 'Pick date'} {/* Concise date format */}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={todo.due_date ? new Date(todo.due_date) : undefined}
+                    onSelect={(date) => setTodo({ ...todo, due_date: date ? date.toISOString().split('T')[0] : "" })}
+                  />
+                </PopoverContent>
+              </Popover>
+
+              {/* Time Input Field */}
+              <Input
+                type="time"
+                value={todo.due_time}
+                onChange={(e) => setTodo({ ...todo, due_time: e.target.value })}
+                placeholder="Time"
+                className="text-base"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={() => {
+            resetForm();
+            onClose();
+          }}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSave} 
+            disabled={!todo.title.trim()}
+            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+          >
+            {editTodo ? "Update Task" : "Add Task"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
