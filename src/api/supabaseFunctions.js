@@ -164,6 +164,24 @@ function getTierCredits(tier) {
 }
 
 /**
+ * Get aggregated activity stats (scalable - computed server-side)
+ * @param {string|null} cutoffDate - ISO date string for filtering, or null for all time
+ * @returns {Promise<Object>} - Aggregated stats object
+ */
+export async function getActivityStats(cutoffDate = null) {
+  const { data, error } = await supabase.rpc('get_activity_stats', {
+    cutoff_date: cutoffDate
+  });
+  
+  if (error) {
+    console.error('Failed to get activity stats:', error);
+    throw error;
+  }
+  
+  return data;
+}
+
+/**
  * Atomically update a statistic count (increment or decrement)
  * Uses PostgreSQL function to prevent race conditions
  * @param {string} statKey - The stat_key to update (e.g., 'total_items', 'total_tasks')

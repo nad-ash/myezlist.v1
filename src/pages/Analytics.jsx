@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { User, UserAdmin, Statistics, ActivityTracking } from "@/api/entities";
+import { User, UserAdmin, Statistics } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, List, Package, Activity, CheckCircle2, Share2, Loader2, ArrowLeft, Database, Crown } from "lucide-react";
@@ -7,8 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { backfillActivityTracking } from "@/api/functions";
-import { OPERATIONS } from "@/utils/trackingContext";
+import { backfillActivityTracking, getActivityStats } from "@/api/functions";
 
 export default function AnalyticsPage() {
   const navigate = useNavigate();
@@ -127,49 +126,20 @@ export default function AnalyticsPage() {
     try {
       const cutoffDate = getDaysAgo();
 
-      // Fetch activities with server-side date filtering when applicable
-      let recentActivities;
-      if (cutoffDate) {
-        // Filter at database level using timestamp field
-        recentActivities = await ActivityTracking.filter({
-          timestamp: { $gte: cutoffDate }
-        });
-        
-        console.log(`📊 Fetched ${recentActivities.length} activities since ${cutoffDate}`);
-      } else {
-        // Fetch all for "All Time" view
-        recentActivities = await ActivityTracking.list();
-        console.log(`📊 Fetched all ${recentActivities.length} activities`);
-      }
-
-      const listsCreated = recentActivities.filter(a => a.operation_name === OPERATIONS.SHOPPING_LIST.CREATE).length;
-      const itemsAdded = recentActivities.filter(a => a.operation_name === OPERATIONS.ITEM.ADD).length;
-      const itemsCompleted = recentActivities.filter(a => a.operation_name === OPERATIONS.ITEM.COMPLETE_SHOPPING).length;
-      const listsShared = recentActivities.filter(a => a.operation_name === OPERATIONS.SHARE.CREATE_LINK).length;
-      const tasksCreated = recentActivities.filter(a => a.operation_name === OPERATIONS.TODO.CREATE).length;
-      const tasksCompleted = recentActivities.filter(a => a.operation_name === OPERATIONS.TODO.COMPLETE).length;
-
-      const activeUserIds = new Set(recentActivities.map(a => a.user_id).filter(Boolean));
-
-      console.log('📈 Activity stats:', {
-        listsCreated,
-        itemsAdded,
-        itemsCompleted,
-        listsShared,
-        tasksCreated,
-        tasksCompleted,
-        activeUsers: activeUserIds.size
-      });
+      // Use server-side aggregation for scalability (single row returned instead of millions)
+      const activityStats = await getActivityStats(cutoffDate);
+      
+      console.log('📈 Activity stats (server-side aggregation):', activityStats);
 
       setStats(prev => ({
         ...prev,
-        activeUsers: activeUserIds.size,
-        listsCreated,
-        itemsAdded,
-        itemsCompleted,
-        listsShared,
-        tasksCreated,
-        tasksCompleted,
+        activeUsers: activityStats.active_users || 0,
+        listsCreated: activityStats.lists_created || 0,
+        itemsAdded: activityStats.items_added || 0,
+        itemsCompleted: activityStats.items_completed || 0,
+        listsShared: activityStats.lists_shared || 0,
+        tasksCreated: activityStats.tasks_created || 0,
+        tasksCompleted: activityStats.tasks_completed || 0,
       }));
 
     } catch (error) {

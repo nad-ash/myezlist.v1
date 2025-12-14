@@ -6,7 +6,11 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   server: {
-    allowedHosts: true
+    allowedHosts: true,
+    watch: {
+      usePolling: true,
+      interval: 100
+    }
   },
   resolve: {
     alias: {

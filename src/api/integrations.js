@@ -38,3 +38,6 @@ export const GenerateImage = getIntegration('GenerateImage', SupabaseIntegration
 export const ExtractDataFromUploadedFile = getIntegration('ExtractDataFromUploadedFile', SupabaseIntegrations.ExtractDataFromUploadedFile);
 export const CreateFileSignedUrl = getIntegration('CreateFileSignedUrl', SupabaseIntegrations.CreateFileSignedUrl);
 export const UploadPrivateFile = getIntegration('UploadPrivateFile', SupabaseIntegrations.UploadPrivateFile);
+
+// Export AI use case constants for model selection
+export const AI_USE_CASES = SupabaseIntegrations.AI_USE_CASES;

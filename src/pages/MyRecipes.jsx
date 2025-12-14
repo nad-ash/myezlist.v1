@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { User, Recipe, RecipeFavorite } from "@/api/entities";
 import { updateStatCount } from "@/api/functions";
 import { trackRecipe, trackRecipeFavorite, PAGES } from "@/utils/trackingContext";
-import { InvokeLLM, GenerateImage, UploadFile } from "@/api/integrations";
+import { InvokeLLM, GenerateImage, UploadFile, AI_USE_CASES } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -177,7 +177,8 @@ export default function MyRecipesPage() {
             ingredients: { type: "array", items: { type: "string" } },
             steps: { type: "array", items: { type: "object", properties: { title: { type: "string" }, instruction: { type: "string" } } } }
           }
-        }
+        },
+        useCase: AI_USE_CASES.RECIPE
       });
       setCurrentStatus('Generating dish image...');
       const imageResult = await GenerateImage({ prompt: `A professional, appetizing food photography of ${response.full_title}, beautifully plated, well-lit, restaurant quality, high resolution` });

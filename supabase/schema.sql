@@ -611,5 +611,37 @@ CREATE TRIGGER on_auth_user_created
     EXECUTE FUNCTION public.handle_new_user();
 
 -- ===========================================
+-- FUNCTION: Get Activity Stats (Aggregated)
+-- Scalable analytics - computes stats server-side
+-- ===========================================
+CREATE OR REPLACE FUNCTION public.get_activity_stats(cutoff_date TIMESTAMPTZ DEFAULT NULL)
+RETURNS JSON AS $$
+DECLARE
+  result JSON;
+BEGIN
+  SELECT json_build_object(
+    'active_users', COUNT(DISTINCT user_id),
+    'lists_created', COUNT(*) FILTER (WHERE operation_name = 'Create New Shopping List'),
+    'lists_deleted', COUNT(*) FILTER (WHERE operation_name = 'Delete Shopping List'),
+    'items_added', COUNT(*) FILTER (WHERE operation_name = 'Add New Item to List'),
+    'items_completed', COUNT(*) FILTER (WHERE operation_name = 'Complete Item in Shopping'),
+    'lists_shared', COUNT(*) FILTER (WHERE operation_name = 'Share Shopping List'),
+    'lists_joined', COUNT(*) FILTER (WHERE operation_name = 'Join List via Link'),
+    'tasks_created', COUNT(*) FILTER (WHERE operation_name = 'Create New Todo'),
+    'tasks_completed', COUNT(*) FILTER (WHERE operation_name = 'Complete Todo'),
+    'recipes_created', COUNT(*) FILTER (WHERE operation_name = 'Create New Recipe'),
+    'recipes_favorited', COUNT(*) FILTER (WHERE operation_name = 'Add Recipe as Favorite')
+  ) INTO result
+  FROM public.activity_tracking
+  WHERE (cutoff_date IS NULL OR "timestamp" >= cutoff_date);
+  
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission to authenticated users (admins only via RLS)
+GRANT EXECUTE ON FUNCTION public.get_activity_stats(TIMESTAMPTZ) TO authenticated;
+
+-- ===========================================
 -- COMPLETE!
 -- ===========================================

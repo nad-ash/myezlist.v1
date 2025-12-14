@@ -119,7 +119,7 @@ export default function ItemCard({ item, onToggleCheck, onToggleFavorite, onDele
 
           {/* Actions - Only show in non-shopping mode */}
           {!isShoppingMode && (
-            <div className="flex items-center gap-2 mt-0.5 flex-shrink-0 overflow-hidden">
+            <div className="flex items-center gap-4 mt-0.5 flex-shrink-0 overflow-hidden">
               {!hideCheckbox && (
                 <Button
                   variant="ghost"

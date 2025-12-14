@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { User, Recipe, RecipeFavorite, ShoppingList, ListMember, Item, ActivityTracking, CommonItem } from "@/api/entities";
 import { updateStatCount } from "@/api/functions";
 import { trackRecipe, trackRecipeFavorite } from "@/utils/trackingContext";
-import { InvokeLLM, GenerateImage, UploadFile } from "@/api/integrations";
+import { InvokeLLM, GenerateImage, UploadFile, AI_USE_CASES } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

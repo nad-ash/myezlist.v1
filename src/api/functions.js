@@ -44,3 +44,6 @@ export const manifest = getFunction('manifest');
 
 // Statistics - Atomic update function
 export const updateStatCount = getFunction('updateStatCount');
+
+// Analytics - Aggregated activity stats (scalable)
+export const getActivityStats = getFunction('getActivityStats');

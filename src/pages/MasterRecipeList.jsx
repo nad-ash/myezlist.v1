@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { User, Recipe } from "@/api/entities";
 import { updateStatCount } from "@/api/functions";
-import { InvokeLLM, GenerateImage, UploadFile } from "@/api/integrations";
+import { InvokeLLM, GenerateImage, UploadFile, AI_USE_CASES } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -160,7 +160,8 @@ Return a JSON with:
               }
             }
           }
-        }
+        },
+        useCase: AI_USE_CASES.RECIPE
       });
 
       // Generate dish image
@@ -289,7 +290,8 @@ Return a JSON with:
                   }
                 }
               }
-            }
+            },
+            useCase: AI_USE_CASES.RECIPE
           });
 
           const imagePrompt = `Professional food photography of ${recipeData.full_title}, beautifully plated, well-lit, appetizing, restaurant quality`;
