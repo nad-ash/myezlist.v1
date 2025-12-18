@@ -41,7 +41,8 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle
+  DialogTitle,
+  DialogDescription
 } from "@/components/ui/dialog";
 import { parseIngredients } from "@/components/utils/ingredientParser";
 import { checkCreditsAvailable, consumeCredits } from "@/components/utils/creditManager";
@@ -627,8 +628,13 @@ export default function RecipeDetailPage() {
     setShowAddToListDialog(true);
     
     try {
+      // Log the ingredients we're processing
+      console.log('Recipe ingredients to process:', recipe.ingredients);
+      console.log('Ingredients count:', recipe.ingredients?.length || 0);
+      
       // Use LLM to extract clean ingredient names and categorize in ONE call
       const ingredientsList = recipe.ingredients.map((ing, idx) => `${idx + 1}. ${ing}`).join('\n');
+      console.log('Formatted ingredients list for LLM:', ingredientsList);
       
       const extractionResponse = await InvokeLLM({
         prompt: `Extract clean ingredient names (without quantities, measurements, or descriptors) from these recipe ingredients and categorize each.
@@ -669,7 +675,31 @@ Return JSON with an array of objects, each containing:
         }
       });
 
-      const extractedIngredients = extractionResponse.ingredients || [];
+      console.log('LLM extraction response:', extractionResponse);
+      
+      // Handle both response formats:
+      // 1. { ingredients: [...] } - wrapped in object
+      // 2. [...] - direct array
+      let extractedIngredients = [];
+      if (Array.isArray(extractionResponse)) {
+        // Response is a direct array
+        extractedIngredients = extractionResponse;
+      } else if (extractionResponse?.ingredients) {
+        // Response is wrapped in { ingredients: [...] }
+        extractedIngredients = extractionResponse.ingredients;
+      } else if (typeof extractionResponse === 'object' && extractionResponse !== null) {
+        // Response might be an object with numeric keys (array-like)
+        const keys = Object.keys(extractionResponse);
+        if (keys.length > 0 && keys.every(k => !isNaN(parseInt(k)))) {
+          extractedIngredients = Object.values(extractionResponse);
+        }
+      }
+      
+      console.log('Extracted ingredients count:', extractedIngredients.length);
+      
+      if (extractedIngredients.length === 0) {
+        console.warn('No ingredients extracted from LLM response. Raw response:', JSON.stringify(extractionResponse));
+      }
       
       const items = extractedIngredients.map((extracted, idx) => ({
         id: `temp-${idx}`,
@@ -1100,6 +1130,9 @@ Return JSON with an array of objects, each containing:
               <DialogTitle className="!text-slate-800 dark:!text-white">
                 Add Ingredients to Shopping Lists
               </DialogTitle>
+              <DialogDescription className="!text-slate-600 dark:!text-slate-400">
+                Select ingredients to add to your shopping list
+              </DialogDescription>
             </DialogHeader>
 
             {!importing ?
