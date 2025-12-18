@@ -112,19 +112,27 @@ async function invokeLLM_OpenAI({ prompt, response_json_schema, useCase = 'defau
     }
   ];
 
+  // Some models (gpt-5-mini, o1, etc.) don't support custom temperature
+  const supportsTemperature = !model.includes('gpt-5') && !model.includes('o1');
+  
+  const requestBody = {
+    model,
+    messages,
+    response_format: response_json_schema ? { type: 'json_object' } : undefined,
+    max_completion_tokens: 2000
+  };
+  
+  if (supportsTemperature) {
+    requestBody.temperature = 0.7;
+  }
+
   const response = await fetch(`${OPENAI_API_URL}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${OPENAI_API_KEY}`
     },
-    body: JSON.stringify({
-      model,
-      messages,
-      response_format: response_json_schema ? { type: 'json_object' } : undefined,
-      temperature: 0.7,
-      max_tokens: 2000
-    })
+    body: JSON.stringify(requestBody)
   });
 
   if (!response.ok) {
