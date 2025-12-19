@@ -75,7 +75,13 @@ export default function AddTodoDialog({ open, onClose, onSave, editTodo = null }
 
   const handleSave = () => {
     if (todo.title.trim()) {
-      onSave(todo);
+      // Convert empty strings to null for date fields (database expects null, not "")
+      const todoData = {
+        ...todo,
+        due_date: todo.due_date || null,
+        due_time: todo.due_time || null,
+      };
+      onSave(todoData);
       resetForm();
     }
   };
@@ -201,19 +207,21 @@ export default function AddTodoDialog({ open, onClose, onSave, editTodo = null }
                   <Button
                     variant="outline"
                     className={cn(
-                      "w-full justify-start text-left font-normal", // Added w-full for consistent sizing
-                      !todo.due_date && "text-slate-500"
+                      "w-full justify-start text-left font-normal",
+                      "dark:!bg-slate-700 dark:!border-slate-500 dark:!text-slate-200 dark:hover:!bg-slate-600",
+                      !todo.due_date && "text-slate-500 dark:!text-slate-400"
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {todo.due_date ? format(new Date(todo.due_date), 'MMM d') : 'Pick date'} {/* Concise date format */}
+                    {todo.due_date ? format(new Date(todo.due_date), 'MMM d') : 'Pick date'}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent className="w-auto p-0 dark:bg-slate-800 dark:border-slate-600">
                   <Calendar
                     mode="single"
                     selected={todo.due_date ? new Date(todo.due_date) : undefined}
                     onSelect={(date) => setTodo({ ...todo, due_date: date ? date.toISOString().split('T')[0] : "" })}
+                    className="dark:bg-slate-800 dark:text-slate-200"
                   />
                 </PopoverContent>
               </Popover>
@@ -224,17 +232,21 @@ export default function AddTodoDialog({ open, onClose, onSave, editTodo = null }
                 value={todo.due_time}
                 onChange={(e) => setTodo({ ...todo, due_time: e.target.value })}
                 placeholder="Time"
-                className="text-base"
+                className="text-base dark:bg-slate-700 dark:border-slate-500 dark:text-slate-200"
               />
             </div>
           </div>
         </div>
 
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => {
-            resetForm();
-            onClose();
-          }}>
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              resetForm();
+              onClose();
+            }}
+            className="!text-slate-700 dark:!text-slate-200 !border-slate-300 dark:!border-slate-500 dark:!bg-slate-700 dark:hover:!bg-slate-600"
+          >
             Cancel
           </Button>
           <Button 

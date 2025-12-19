@@ -435,7 +435,14 @@ export default function ListViewPage() {
   }
 
   const activeItems = items.filter(item => !item.is_checked);
-  const checkedItems = items.filter(item => item.is_checked);
+  // Sort checked items by checked_date descending (most recently archived first)
+  const checkedItems = items
+    .filter(item => item.is_checked)
+    .sort((a, b) => {
+      const dateA = a.checked_date ? new Date(a.checked_date) : new Date(0);
+      const dateB = b.checked_date ? new Date(b.checked_date) : new Date(0);
+      return dateB - dateA; // Descending order (newest first)
+    });
   const favoriteItems = activeItems.filter(item => item.is_favorite);
 
   const categories = ["all", ...new Set(activeItems.map(item => item.category).filter(Boolean))];
