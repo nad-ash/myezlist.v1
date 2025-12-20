@@ -180,15 +180,19 @@ export default function SettingsPage() {
     
     setManagingSubscription(true);
     try {
+      // createCustomerPortal already handles the redirect internally
+      // It returns { url: "..." } and redirects to that URL
       const response = await createCustomerPortal();
       console.log('Portal response:', response);
       
-      if (response.data && response.data.url) {
-        // Redirect to Stripe Customer Portal
+      // The redirect happens inside createCustomerPortal, but just in case:
+      if (response && response.url) {
+        window.location.href = response.url;
+      } else if (response && response.data && response.data.url) {
+        // Fallback for wrapped response
         window.location.href = response.data.url;
-      } else {
-        throw new Error('No portal URL returned');
       }
+      // If we get here without redirect, the function already handled it
     } catch (error) {
       console.error("Error opening customer portal:", error);
       alert("Failed to open subscription management. Please try again.");

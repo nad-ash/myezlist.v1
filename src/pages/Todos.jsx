@@ -258,7 +258,10 @@ export default function TodosPage() {
       ...taskData,
       created_by: user.email,
     };
-    createTodoMutation.mutate(taskDataWithUser);
+    createTodoMutation.mutate({
+      todoData: taskDataWithUser,
+      trackingContext: trackTodo.create(user.id, taskData.title)
+    });
   };
 
   // Filter by status

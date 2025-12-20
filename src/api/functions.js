@@ -35,6 +35,7 @@ export const stripeWebhook = getFunction('stripeWebhook');
 
 // Subscription Management
 export const manualUpgrade = getFunction('manualUpgrade');
+export const refundLastPayment = getFunction('refundLastPayment');
 
 // Admin Functions
 export const backfillActivityTracking = getFunction('backfillActivityTracking');

@@ -15,12 +15,16 @@ import {
   Mail,
   Calendar,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  CreditCard,
+  XCircle,
+  RotateCcw,
+  DollarSign
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { manualUpgrade } from "@/api/functions";
+import { manualUpgrade, refundLastPayment } from "@/api/functions";
 
 const tierIcons = {
   free: Package,
@@ -48,6 +52,7 @@ export default function UserManagement() {
   const [allTiers, setAllTiers] = useState([]);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [refunding, setRefunding] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -153,6 +158,31 @@ export default function UserManagement() {
       setError("Failed to upgrade user. Please try again.");
     }
     setUpgrading(false);
+  };
+
+  const handleRefund = async () => {
+    if (!selectedUser) return;
+
+    if (!confirm(`Are you sure you want to refund the last payment for ${selectedUser.email}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setRefunding(true);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const result = await refundLastPayment({ userId: selectedUser.id });
+      
+      setSuccessMessage(`Successfully refunded $${result.amount.toFixed(2)} ${result.currency.toUpperCase()} for ${selectedUser.email}`);
+      
+      // Refresh user data
+      handleSearch();
+    } catch (error) {
+      console.error("Error refunding payment:", error);
+      setError(error.message || "Failed to process refund. Please try again.");
+    }
+    setRefunding(false);
   };
 
   if (isAuthChecking) {
@@ -395,6 +425,155 @@ export default function UserManagement() {
                   >
                     {(selectedUser.monthly_credits_total || 0) - (selectedUser.credits_used_this_month || 0)}/{selectedUser.monthly_credits_total || 0}
                   </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Payment & Subscription History */}
+          <Card 
+            className="mb-8"
+            style={{
+              backgroundColor: isDarkMode ? 'rgb(30 41 59)' : '',
+              borderColor: isDarkMode ? 'rgb(71 85 105)' : ''
+            }}
+          >
+            <CardHeader>
+              <CardTitle style={{ color: isDarkMode ? 'rgb(248 250 252)' : '' }}>
+                Payment & Subscription History
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Last Payment Date */}
+                <div className="flex items-center gap-3">
+                  <CreditCard className="w-5 h-5 text-green-500" />
+                  <div className="flex-1">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Last Payment / Renewal Date</p>
+                    <p className="font-semibold text-slate-800 dark:text-slate-100">
+                      {selectedUser.last_payment_date 
+                        ? new Date(selectedUser.last_payment_date).toLocaleDateString('en-US', { 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
+                        : 'No payments recorded'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Subscription Status */}
+                <div className="flex items-center gap-3">
+                  {selectedUser.stripe_subscription_status === 'canceled' ? (
+                    <XCircle className="w-5 h-5 text-red-500" />
+                  ) : selectedUser.subscription_cancel_reason === 'pending_cancel' ? (
+                    <AlertCircle className="w-5 h-5 text-orange-500" />
+                  ) : selectedUser.stripe_subscription_status === 'active' ? (
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5 text-yellow-500" />
+                  )}
+                  <div className="flex-1">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Subscription Status</p>
+                    <p className="font-semibold text-slate-800 dark:text-slate-100 capitalize">
+                      {selectedUser.subscription_cancel_reason === 'pending_cancel' 
+                        ? 'Cancellation Pending' 
+                        : (selectedUser.stripe_subscription_status || 'No active subscription')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Cancellation Date */}
+                {(selectedUser.stripe_subscription_status === 'canceled' || selectedUser.subscription_cancel_reason === 'pending_cancel') && selectedUser.subscription_end_date && (
+                  <div className="flex items-center gap-3">
+                    <Calendar className={cn(
+                      "w-5 h-5",
+                      selectedUser.subscription_cancel_reason === 'pending_cancel' ? "text-orange-500" : "text-red-500"
+                    )} />
+                    <div className="flex-1">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        {selectedUser.subscription_cancel_reason === 'pending_cancel' 
+                          ? 'Scheduled Cancellation Date' 
+                          : 'Cancellation Date'}
+                      </p>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100">
+                        {new Date(selectedUser.subscription_end_date).toLocaleDateString('en-US', { 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Last Refunded Date */}
+                {selectedUser.last_refunded_date && (
+                  <div className="flex items-center gap-3">
+                    <RotateCcw className="w-5 h-5 text-orange-500" />
+                    <div className="flex-1">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Last Refund Issued</p>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100">
+                        {new Date(selectedUser.last_refunded_date).toLocaleDateString('en-US', { 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Refund Button */}
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-600">
+                  {(() => {
+                    // Check for canceled OR pending cancellation (stored in subscription_cancel_reason)
+                    const isCanceledOrPending = selectedUser.stripe_subscription_status === 'canceled' || 
+                                                selectedUser.subscription_cancel_reason === 'pending_cancel';
+                    const canRefund = isCanceledOrPending && selectedUser.last_payment_date;
+                    return (
+                      <>
+                        <Button
+                          onClick={handleRefund}
+                          disabled={!canRefund || refunding}
+                          className={cn(
+                            "w-full gap-2",
+                            canRefund
+                              ? "bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                              : "bg-slate-400 cursor-not-allowed"
+                          )}
+                        >
+                          {refunding ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Processing Refund...
+                            </>
+                          ) : (
+                            <>
+                              <DollarSign className="w-4 h-4" />
+                              Refund Last Payment
+                            </>
+                          )}
+                        </Button>
+                        {!isCanceledOrPending && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">
+                            Refund is only available after the subscription is canceled
+                          </p>
+                        )}
+                        {isCanceledOrPending && !selectedUser.last_payment_date && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">
+                            No payment record found for this user
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </CardContent>

@@ -129,6 +129,15 @@ export async function manualUpgrade({ userId, tier }) {
 }
 
 /**
+ * Refund last payment (admin function)
+ * @param {Object} params - { userId }
+ * @returns {Promise<Object>} - { success, refundId, amount, currency, status }
+ */
+export async function refundLastPayment({ userId }) {
+  return await callEdgeFunction('refund-last-payment', { userId });
+}
+
+/**
  * Backfill activity tracking (admin function)
  */
 export async function backfillActivityTracking() {

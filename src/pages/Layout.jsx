@@ -123,10 +123,19 @@ export default function Layout({ children, currentPageName }) {
 
   const isLandingPage = currentPageName === "Landing";
   const isJoinPage = currentPageName === "JoinListViaLink";
+  const isLoginPage = currentPageName === "Login";
+
+  // Reset loadAttempted when navigating to a new page (allows re-fetching after login)
+  React.useEffect(() => {
+    // Reset the flag when page changes, so user can be re-fetched after login redirect
+    if (!isLandingPage && !isLoginPage && !user) {
+      loadAttempted.current = false;
+    }
+  }, [currentPageName, isLandingPage, isLoginPage, user]);
 
   React.useEffect(() => {
-    // Don't load user on Landing page - it's for logged out users
-    if (isLandingPage) {
+    // Don't load user on Landing page or Login page - they're for logged out users
+    if (isLandingPage || isLoginPage) {
       setIsLoadingUser(false);
       return;
     }
@@ -174,7 +183,7 @@ export default function Layout({ children, currentPageName }) {
     return () => {
       mounted = false;
     };
-  }, [isLandingPage, user]);
+  }, [isLandingPage, isLoginPage, user]);
 
   const handleLogout = React.useCallback(async () => {
     console.log('🚪 LOGOUT: Clearing cache and logging out');

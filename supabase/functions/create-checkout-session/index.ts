@@ -19,22 +19,32 @@ serve(async (req) => {
       apiVersion: "2023-10-16",
     });
 
-    const supabaseClient = createClient(
+    // Use anon key for auth verification
+    const supabaseAuth = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    );
+
+    // Use service role key for database queries (bypasses RLS)
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
     // Get the user from the auth header
     const authHeader = req.headers.get("Authorization")!;
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(token);
 
     if (userError || !user) {
+      console.error("Auth error:", userError);
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log(`Creating checkout session for user: ${user.id}`);
 
     const { priceId, successUrl, cancelUrl } = await req.json();
 
@@ -45,17 +55,25 @@ serve(async (req) => {
       );
     }
 
-    // Get or create Stripe customer
-    const { data: profile } = await supabaseClient
+    console.log(`Price ID: ${priceId}`);
+
+    // Get or create Stripe customer (using admin client to bypass RLS)
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
       .select("stripe_customer_id, email")
       .eq("id", user.id)
       .single();
 
+    if (profileError) {
+      console.error("Profile query error:", profileError);
+    }
+
     let customerId = profile?.stripe_customer_id;
+    console.log(`Existing Stripe customer ID: ${customerId || 'none'}`);
 
     if (!customerId) {
       // Create a new Stripe customer
+      console.log(`Creating new Stripe customer for: ${user.email || profile?.email}`);
       const customer = await stripe.customers.create({
         email: user.email || profile?.email,
         metadata: {
@@ -63,12 +81,19 @@ serve(async (req) => {
         },
       });
       customerId = customer.id;
+      console.log(`Created Stripe customer: ${customerId}`);
 
-      // Save customer ID to profile
-      await supabaseClient
+      // Save customer ID to profile (using admin client to bypass RLS)
+      const { error: updateError } = await supabaseAdmin
         .from("profiles")
         .update({ stripe_customer_id: customerId })
         .eq("id", user.id);
+
+      if (updateError) {
+        console.error("Failed to save customer ID:", updateError);
+      } else {
+        console.log(`Saved Stripe customer ID to profile`);
+      }
     }
 
     // Create Checkout Session
@@ -94,6 +119,8 @@ serve(async (req) => {
       },
     });
 
+    console.log(`Checkout session created: ${session.id}`);
+
     return new Response(
       JSON.stringify({ sessionId: session.id, url: session.url }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -106,4 +133,3 @@ serve(async (req) => {
     );
   }
 });
-

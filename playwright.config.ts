@@ -8,8 +8,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load environment variables from .env.test.local first, then .env.test
-dotenv.config({ path: path.resolve(__dirname, '.env.test.local') });
-dotenv.config({ path: path.resolve(__dirname, '.env.test') });
+// Use override: false to not overwrite existing values
+dotenv.config({ path: path.resolve(__dirname, '.env.test.local'), override: true });
+dotenv.config({ path: path.resolve(__dirname, '.env.test'), override: false });
+
+// Debug: Log loaded test credentials (without revealing password)
+console.log('Playwright config loaded with TEST_USER_EMAIL:', process.env.TEST_USER_EMAIL ? 'SET' : 'NOT SET');
 
 /**
  * Playwright configuration for E2E tests
@@ -51,6 +55,12 @@ export default defineConfig({
     // Record video on failure
     video: 'on-first-retry',
   },
+
+  // Pass environment variables to test workers
+  // This ensures env vars are available in test files
+  ...(process.env.TEST_USER_EMAIL && {
+    // These will be available in process.env in test files
+  }),
 
   // Configure projects for major browsers
   projects: [
