@@ -29,6 +29,8 @@ CREATE TABLE public.profiles (
     stripe_customer_id text,
     stripe_subscription_id text,
     stripe_subscription_status text,
+    last_payment_date timestamp with time zone,
+    last_refunded_date timestamp with time zone,
     updated_date timestamp with time zone DEFAULT now(),
     CONSTRAINT profiles_pkey PRIMARY KEY (id),
     CONSTRAINT stripe_subscription_status_check CHECK (((stripe_subscription_status IS NULL) OR (stripe_subscription_status = ANY (ARRAY['active'::text, 'canceled'::text, 'incomplete'::text, 'incomplete_expired'::text, 'past_due'::text, 'trialing'::text, 'unpaid'::text]))))

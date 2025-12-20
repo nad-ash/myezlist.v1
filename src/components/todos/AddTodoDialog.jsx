@@ -23,6 +23,13 @@ import { format } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Parse date string (YYYY-MM-DD) as local date to avoid timezone shift
+const parseLocalDate = (dateString) => {
+  if (!dateString) return null;
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 const categories = [
   { value: "home", label: "Home", icon: "🏠" },
   { value: "work", label: "Work", icon: "💼" },
@@ -213,14 +220,24 @@ export default function AddTodoDialog({ open, onClose, onSave, editTodo = null }
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {todo.due_date ? format(new Date(todo.due_date), 'MMM d') : 'Pick date'}
+                    {todo.due_date ? format(parseLocalDate(todo.due_date), 'MMM d') : 'Pick date'}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0 dark:bg-slate-800 dark:border-slate-600">
                   <Calendar
                     mode="single"
-                    selected={todo.due_date ? new Date(todo.due_date) : undefined}
-                    onSelect={(date) => setTodo({ ...todo, due_date: date ? date.toISOString().split('T')[0] : "" })}
+                    selected={todo.due_date ? parseLocalDate(todo.due_date) : undefined}
+                    onSelect={(date) => {
+                      if (date) {
+                        // Format as YYYY-MM-DD using local date components to avoid timezone issues
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        setTodo({ ...todo, due_date: `${year}-${month}-${day}` });
+                      } else {
+                        setTodo({ ...todo, due_date: "" });
+                      }
+                    }}
                     className="dark:bg-slate-800 dark:text-slate-200"
                   />
                 </PopoverContent>

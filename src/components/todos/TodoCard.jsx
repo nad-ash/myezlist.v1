@@ -19,6 +19,13 @@ import {
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
+// Parse date string (YYYY-MM-DD) as local date to avoid timezone shift
+const parseLocalDate = (dateString) => {
+  if (!dateString) return null;
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 const priorityConfig = {
   high: { color: "bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700", icon: Flame },
   medium: { color: "bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700", icon: Zap },
@@ -108,7 +115,7 @@ export default function TodoCard({ todo, onToggleComplete, onToggleFavorite, onE
             {todo.due_date && (
               <Badge variant="outline" className="text-xs flex items-center gap-1 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200">
                 <CalendarIcon className="w-3 h-3" />
-                {format(new Date(todo.due_date), 'MMM d, yyyy')}
+                {format(parseLocalDate(todo.due_date), 'MMM d, yyyy')}
                 {todo.due_time && ` at ${todo.due_time}`}
               </Badge>
             )}
