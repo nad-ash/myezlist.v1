@@ -1,14 +1,82 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <link rel="manifest" href="/manifest.json" />
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/icons/MyEZList_64.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MyEZList</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <!-- Basic Meta -->
+    <title>MyEZList - Smart Shopping & Tasks</title>
+    <meta name="description" content="MyEZList is your all-in-one life organizer! Create smart shopping lists, manage tasks, and discover recipes with AI-powered suggestions." />
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="64x64" href="/icons/MyEZList_64.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/MyEZList_192.png" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="msapplication-TileColor" content="#2563eb" />
+    
+    <!-- Apple PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="MyEZList" />
+    <link rel="apple-touch-icon" href="/icons/MyEZList_192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/MyEZList_192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/MyEZList_192.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/MyEZList_192.png" />
+    
+    <!-- Microsoft Tile -->
+    <meta name="msapplication-TileImage" content="/icons/MyEZList_192.png" />
+    
+    <!-- Open Graph / Social Media -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="MyEZList - Smart Shopping & Tasks" />
+    <meta property="og:description" content="Your all-in-one life organizer with smart shopping lists, task management, and AI-powered recipes." />
+    <meta property="og:image" content="/icons/MyEZList_512.png" />
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="MyEZList - Smart Shopping & Tasks" />
+    <meta name="twitter:description" content="Your all-in-one life organizer with smart shopping lists, task management, and AI-powered recipes." />
+    
+    <!-- Prevent phone number detection -->
+    <meta name="format-detection" content="telephone=no" />
+    
+    <!-- Preconnect to external domains -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then((registration) => {
+              console.log('ServiceWorker registered:', registration.scope);
+              
+              // Check for updates
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    // New version available
+                    console.log('New version available! Refresh to update.');
+                  }
+                });
+              });
+            })
+            .catch((error) => {
+              console.error('ServiceWorker registration failed:', error);
+            });
+        });
+      }
+    </script>
   </body>
 </html>
