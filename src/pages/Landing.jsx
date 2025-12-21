@@ -215,7 +215,7 @@ export default function LandingPage() {
                 </span>
                 <div className="flex items-center gap-4">
                   <img 
-                    src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/52890d187_MyEZList_Icon_512x512.png"
+                    src="/icons/MyEZList_512.png"
                     alt="MyEZList"
                     className="w-16 h-16 md:w-20 md:h-20 object-contain"
                   />
@@ -530,7 +530,7 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <img 
-                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/52890d187_MyEZList_Icon_512x512.png"
+                src="/icons/MyEZList_512.png"
                 alt="MyEZList"
                 className="w-8 h-8 object-contain"
               />

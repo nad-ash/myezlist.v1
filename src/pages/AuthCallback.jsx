@@ -103,7 +103,7 @@ export default function AuthCallback() {
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-6">
           <img 
-            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/52890d187_MyEZList_Icon_512x512.png"
+            src="/icons/MyEZList_512.png"
             alt="MyEZList"
             className="w-12 h-12 object-contain"
           />
