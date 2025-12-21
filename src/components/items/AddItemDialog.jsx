@@ -496,7 +496,7 @@ export default function AddItemDialog({ open, onClose, onSave, listSections, edi
             />
             <Label htmlFor="organic" className="flex items-center gap-2 cursor-pointer text-sm font-medium !text-green-800 dark:!text-white">
               <img 
-                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/bb4a74a3b_Untitleddesign2.png" 
+                src="/icons/organic-badge.png" 
                 alt="Organic"
                 className="w-8 h-8 object-contain bg-transparent"
                 style={{ mixBlendMode: 'multiply' }}

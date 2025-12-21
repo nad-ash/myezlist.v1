@@ -290,8 +290,8 @@ export default function ShoppingModeActivePage() {
   });
 
   return (
-    <div className="min-h-screen w-screen overflow-x-hidden">
-      <div className="w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen w-full overflow-x-hidden">
+      <div className="w-full max-w-full">
         <div className="max-w-2xl mx-auto py-4 sm:py-8 w-full">
           {/* Mobile-friendly Header */}
           <div className="flex items-center gap-2 sm:gap-4 mb-6 px-4">

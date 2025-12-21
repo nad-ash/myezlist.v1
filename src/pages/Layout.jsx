@@ -603,7 +603,7 @@ export default function Layout({ children, currentPageName }) {
               <div className="flex justify-between items-center h-16">
                 <Link to={createPageUrl(user ? "Home" : "Landing")} className="flex items-center gap-2">
                   <img 
-                    src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/52890d187_MyEZList_Icon_512x512.png"
+                    src="/icons/MyEZList_512.png"
                     alt="MyEZList"
                     className="w-9 h-9 object-contain"
                   />

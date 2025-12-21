@@ -1,25 +1,37 @@
 {
-  "id": "https://myezlist.com/",
-  "name": "MyEZList",
+  "id": "/",
+  "name": "MyEZList - Smart Shopping & Tasks",
   "short_name": "MyEZList",
   "description": "MyEZList is your all-in-one life organizer! Create smart shopping lists, manage tasks efficiently, and discover delicious recipes with AI-powered suggestions. Enjoy seamless family sharing, ad-free options, and a beautiful, intuitive interface designed to simplify your daily life and keep you organized.",
 
   "icons": [
     {
-      "src": "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/52890d187_MyEZList_Icon_512x512.png",
+      "src": "/icons/MyEZList_64.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/MyEZList_192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/52890d187_MyEZList_Icon_512x512.png",
+      "src": "/icons/MyEZList_512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/52890d187_MyEZList_Icon_1024x1024.png",
+      "src": "/icons/MyEZList_1024.png",
       "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/MyEZList_Maskable.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     }
@@ -28,36 +40,36 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "browser"],
+  "display_override": ["standalone", "minimal-ui"],
 
   "theme_color": "#2563eb",
   "background_color": "#ffffff",
-  "orientation": "any",
+  "orientation": "portrait-primary",
 
-  "categories": ["productivity", "utilities", "shopping", "food_and_drink", "lifestyle"],
+  "categories": ["productivity", "utilities", "shopping", "food", "lifestyle"],
 
   "shortcuts": [
     {
-      "name": "Home",
-      "short_name": "Home",
-      "description": "Go to the home dashboard",
-      "url": "/Home",
+      "name": "Shopping Lists",
+      "short_name": "Shopping",
+      "description": "Manage your shopping lists",
+      "url": "/ShoppingMode",
       "icons": [
         {
-          "src": "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/37018c23b_house.png",
+          "src": "/icons/MyEZList_192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
       ]
     },
     {
-      "name": "Shopping",
-      "short_name": "Shopping",
-      "description": "Manage your shopping lists",
-      "url": "/ShoppingMode",
+      "name": "My Tasks",
+      "short_name": "Tasks",
+      "description": "Manage your tasks and to-dos",
+      "url": "/Todos",
       "icons": [
         {
-          "src": "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/c48838916_shopping-cart.png",
+          "src": "/icons/MyEZList_192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
@@ -66,24 +78,11 @@
     {
       "name": "Recipes",
       "short_name": "Recipes",
-      "description": "View and create recipes",
+      "description": "Browse and create recipes",
       "url": "/Recipe",
       "icons": [
         {
-          "src": "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/1b0f58108_utensils.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
-    },
-    {
-      "name": "Tasks",
-      "short_name": "Tasks",
-      "description": "Manage your tasks",
-      "url": "/Todos",
-      "icons": [
-        {
-          "src": "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68e49376f2948d5caa147758/720cc323d_circle-check.png",
+          "src": "/icons/MyEZList_192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
@@ -91,5 +90,117 @@
     }
   ],
 
-  "prefer_related_applications": false
+  "screenshots": [
+    {
+      "src": "/screenshots/phone/shoppinglists.png",
+      "sizes": "1179x2556",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Shopping Lists"
+    },
+    {
+      "src": "/screenshots/phone/shoppinglist.png",
+      "sizes": "1179x2556",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Shopping List View"
+    },
+    {
+      "src": "/screenshots/phone/shoppinglist-darkmode.png",
+      "sizes": "1179x2556",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Dark Mode"
+    },
+    {
+      "src": "/screenshots/phone/shoppinglist-colormode.png",
+      "sizes": "1179x2556",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Colorful Theme"
+    },
+    {
+      "src": "/screenshots/phone/tasks-colormode.png",
+      "sizes": "1179x2556",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Task Management"
+    },
+    {
+      "src": "/screenshots/phone/recipe.png",
+      "sizes": "1179x2556",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Recipe Discovery"
+    },
+    {
+      "src": "/screenshots/phone/recipe-cookingsteps.png",
+      "sizes": "1179x2556",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Cooking Steps"
+    },
+    {
+      "src": "/screenshots/phone/settings.png",
+      "sizes": "1179x2556",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Settings & Subscription"
+    },
+    {
+      "src": "/screenshots/tablet/home-tablet.png",
+      "sizes": "1024x1366",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Home Dashboard - Tablet"
+    },
+    {
+      "src": "/screenshots/tablet/shoppinglist-tablet.png",
+      "sizes": "1024x1366",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Shopping List - Tablet"
+    },
+    {
+      "src": "/screenshots/tablet/shoppinglist-tablet-darkmode.png",
+      "sizes": "1024x1366",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Dark Mode - Tablet"
+    },
+    {
+      "src": "/screenshots/tablet/tasks-tablet.png",
+      "sizes": "1024x1366",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Tasks - Tablet"
+    },
+    {
+      "src": "/screenshots/tablet/recipe-tablet.png",
+      "sizes": "1024x1366",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Recipes - Tablet"
+    },
+    {
+      "src": "/screenshots/tablet/recipe-cookingsteps-tablet.png",
+      "sizes": "1024x1366",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Cooking Steps - Tablet"
+    }
+  ],
+
+  "related_applications": [],
+  "prefer_related_applications": false,
+
+  "lang": "en-US",
+  "dir": "ltr",
+
+  "iarc_rating_id": "",
+  
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
 }
