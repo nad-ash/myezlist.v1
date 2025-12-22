@@ -27,3 +27,6 @@ dist-ssr
 *.sw?
 
 .env
+
+# Supabase CLI temporary files
+supabase/.temp/
