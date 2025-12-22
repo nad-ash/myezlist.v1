@@ -282,10 +282,21 @@ export default function RecipeDetailPage() {
     if (!user || !recipe) return;
     
     setDeleting(true);
+    
+    // Primary operation: Delete the recipe
     try {
-      // Delete the recipe
       await Recipe.delete(recipe.id);
-      
+    } catch (error) {
+      console.error("Error deleting recipe:", error);
+      alert("Failed to delete recipe. Please try again.");
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+      return;
+    }
+    
+    // Recipe deleted successfully - perform secondary operations
+    // These are non-critical and should not affect user experience if they fail
+    try {
       // Decrement custom recipes count for this user
       const currentUser = await User.me();
       const newRecipeCount = Math.max(0, (currentUser.current_custom_recipes || 1) - 1);
@@ -293,30 +304,30 @@ export default function RecipeDetailPage() {
       
       // Update statistics - atomic decrement total_user_generated_recipes
       await updateStatCount('total_user_generated_recipes', -1);
-      
-      // Clear recipes cache
-      appCache.clearRecipes();
-      appCache.clearUser();
-      
-      // Track activity
-      ActivityTracking.create({
-        operation_type: 'DELETE',
-        page: 'RecipeDetail',
-        operation_name: 'Delete Custom Recipe',
-        description: `User deleted custom recipe "${recipe.full_title}"`,
-        user_id: user.id,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Navigate back to My Recipes
-      navigate(createPageUrl('MyRecipes'));
     } catch (error) {
-      console.error("Error deleting recipe:", error);
-      alert("Failed to delete recipe. Please try again.");
-    } finally {
-      setDeleting(false);
-      setShowDeleteConfirm(false);
+      console.error("Error updating counts after recipe deletion:", error);
+      // Continue anyway - the recipe was deleted successfully
     }
+    
+    // Clear caches (synchronous, won't throw)
+    appCache.clearRecipes();
+    appCache.clearUser();
+    
+    // Track activity (fire and forget - don't await)
+    ActivityTracking.create({
+      operation_type: 'DELETE',
+      page: 'RecipeDetail',
+      operation_name: 'Delete Custom Recipe',
+      description: `User deleted custom recipe "${recipe.full_title}"`,
+      user_id: user.id,
+      timestamp: new Date().toISOString()
+    });
+    
+    setDeleting(false);
+    setShowDeleteConfirm(false);
+    
+    // Navigate back to My Recipes
+    navigate(createPageUrl('MyRecipes'));
   };
 
   const handleEditClick = async () => {
