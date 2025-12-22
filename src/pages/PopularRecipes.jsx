@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { appCache } from "@/components/utils/appCache";
+import { useRecipeLoadingPhrases } from "@/hooks/useRecipeLoadingPhrases";
 
 const allCuisines = [
   "Italian", "Indian / Pakistani", "Chinese", "Mexican", "French", "Japanese",
@@ -38,9 +39,12 @@ export default function PopularRecipesPage() {
   // Create states
   const [searchTerm, setSearchTerm] = useState('');
   const [generating, setGenerating] = useState(false);
-  const [currentStatus, setCurrentStatus] = useState('');
+  const [generationStage, setGenerationStage] = useState('recipe'); // 'recipe', 'image', 'saving'
   const [error, setError] = useState(null);
   const [createMethod, setCreateMethod] = useState("ai");
+  
+  // Rotating loading phrases
+  const loadingPhrase = useRecipeLoadingPhrases(generating, generationStage);
   const [manualRecipe, setManualRecipe] = useState({
     full_title: '', cooking_time: '', cuisine: 'Italian', servings: 4,
     calories_per_serving: '', photo_url: '', ingredients: [''], steps: [{ title: '', instruction: '' }]
@@ -154,7 +158,7 @@ export default function PopularRecipesPage() {
   const handleGenerateRecipe = async () => {
     setError(null);
     if (!searchTerm.trim()) { alert('Please enter a dish name'); return; }
-    setGenerating(true); setCurrentStatus('Generating recipe details...');
+    setGenerating(true); setGenerationStage('recipe');
     try {
       const recipePrompt = `Generate a detailed recipe for: "${searchTerm}". Return JSON with these exact fields:
 - full_title: string (the complete dish name)
@@ -181,9 +185,9 @@ Do NOT use "description", "step_number", "name", or any other property names for
         },
         useCase: AI_USE_CASES.RECIPE
       });
-      setCurrentStatus('Generating dish image...');
+      setGenerationStage('image');
       const imageResult = await GenerateImage({ prompt: `A professional, appetizing food photography of ${response.full_title}, beautifully plated, well-lit, restaurant quality, high resolution` });
-      setCurrentStatus('Saving recipe...');
+      setGenerationStage('saving');
       const savedRecipe = await Recipe.create({
         recipe_name: searchTerm.trim(), ...response, photo_url: imageResult.url,
         is_user_generated: true, generated_by_user_id: user.id
@@ -199,7 +203,7 @@ Do NOT use "description", "step_number", "name", or any other property names for
       console.error("Error generating recipe:", err);
       setError("Failed to generate recipe. Please try again.");
     } finally {
-      setGenerating(false); setCurrentStatus('');
+      setGenerating(false); setGenerationStage('recipe');
     }
   };
 
@@ -495,10 +499,14 @@ Do NOT use "description", "step_number", "name", or any other property names for
                       onChange={(e) => setSearchTerm(e.target.value)} disabled={generating} className="text-lg h-12" />
                     <Button onClick={handleGenerateRecipe} disabled={generating || !searchTerm.trim()}
                       className="h-12 bg-orange-600 hover:bg-orange-700">
-                      {generating ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />{currentStatus || "Generating..."}</> : <><Sparkles className="w-5 h-5 mr-2" />Generate</> }
+                      {generating ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Creating Magic...</> : <><Sparkles className="w-5 h-5 mr-2" />Generate</> }
                     </Button>
                   </div>
-                  {generating && <div className="mt-4 text-center"><p className="text-sm text-blue-600">{currentStatus}</p></div>}
+                  {generating && (
+                    <div className="mt-4 text-center animate-pulse">
+                      <p className="text-sm font-medium text-blue-600 dark:text-blue-400">{loadingPhrase}</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
               {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">{error}</div>}

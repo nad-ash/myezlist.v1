@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { consumeCredits, checkCreditsAvailable } from "@/components/utils/creditManager";
+import { useRecipeLoadingPhrases } from "@/hooks/useRecipeLoadingPhrases";
 
 export default function MasterRecipeListPage() {
   const navigate = useNavigate();
@@ -37,12 +38,16 @@ export default function MasterRecipeListPage() {
   const [showBulkGenerateDialog, setShowBulkGenerateDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false); // New state for import dialog
   const [generating, setGenerating] = useState(false);
+  const [generationStage, setGenerationStage] = useState('recipe'); // 'recipe', 'image', 'saving'
   const [bulkGenerating, setBulkGenerating] = useState(false);
   const [importLoading, setImportLoading] = useState(false); // New state for import loading
   const [newRecipeName, setNewRecipeName] = useState('');
   const [bulkDishNames, setBulkDishNames] = useState('');
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0, currentDish: '' });
   const [isDarkMode, setIsDarkMode] = useState(false);
+  
+  // Rotating loading phrases
+  const loadingPhrase = useRecipeLoadingPhrases(generating, generationStage);
 
   useEffect(() => {
     loadRecipes();
@@ -110,6 +115,7 @@ export default function MasterRecipeListPage() {
     }
 
     setGenerating(true);
+    setGenerationStage('recipe');
     try {
       const user = await User.me();
 
@@ -168,6 +174,7 @@ Do NOT use "description", "step_number", "name", or any other property names for
       });
 
       // Generate dish image
+      setGenerationStage('image');
       const imagePrompt = `Professional food photography of ${recipeData.full_title}, beautifully plated, well-lit, appetizing, restaurant quality`;
       let photoUrl = '';
       try {
@@ -177,6 +184,7 @@ Do NOT use "description", "step_number", "name", or any other property names for
         console.warn('Image generation failed:', error);
       }
 
+      setGenerationStage('saving');
       await Recipe.create({
         recipe_name: newRecipeName.trim(),
         full_title: recipeData.full_title,
@@ -637,8 +645,8 @@ Do NOT use "description", "step_number", "name", or any other property names for
             {generating && (
               <div className="text-center py-4">
                 <Loader2 className="w-8 h-8 animate-spin text-orange-500 mx-auto mb-2" />
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Generating recipe with AI... (10-15 seconds)
+                <p className="text-sm font-medium text-blue-600 dark:text-blue-400 animate-pulse">
+                  {loadingPhrase}
                 </p>
               </div>
             )}

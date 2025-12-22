@@ -19,6 +19,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const corsHeaders = {
@@ -155,7 +156,8 @@ async function generateImage_OpenAI(
     }
     
     const imageBlob = await imageResponse.arrayBuffer();
-    const base64Data = btoa(String.fromCharCode(...new Uint8Array(imageBlob)));
+    // Use Deno's encodeBase64 to safely handle large images (avoids RangeError from spread operator)
+    const base64Data = encodeBase64(new Uint8Array(imageBlob));
     const publicUrl = await uploadToStorage(base64Data, "image/png", supabaseClient);
     return { url: publicUrl };
   }
