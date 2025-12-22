@@ -79,7 +79,9 @@ export function useRecipeLoadingPhrases(isGenerating, stage = 'recipe', interval
   }, [isGenerating, stage, intervalMs]);
 
   const phrases = LOADING_PHRASES[stage] || LOADING_PHRASES.recipe;
-  return isGenerating ? phrases[phraseIndex] : '';
+  // Use modulo to ensure index is always valid, even before effect resets it on stage change
+  const safeIndex = phraseIndex % phrases.length;
+  return isGenerating ? phrases[safeIndex] : '';
 }
 
 /**
