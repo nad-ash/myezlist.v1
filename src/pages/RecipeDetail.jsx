@@ -95,6 +95,10 @@ export default function RecipeDetailPage() {
   // Share dialog state
   const [showShareDialog, setShowShareDialog] = useState(false);
 
+  // Delete recipe state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   // Signup prompt state for guest users
   const [showSignupPrompt, setShowSignupPrompt] = useState(false);
   const [signupFeature, setSignupFeature] = useState("default");
@@ -167,12 +171,20 @@ export default function RecipeDetailPage() {
   const loadRecipe = async () => {
     setLoading(true);
     try {
-      // No need to set user and check favorite here directly
-      // The common loadUserAndFavorite will be called after setRecipe
-      const allRecipes = await Recipe.list();
+      // ✅ Try to get recipe from cache first
+      let allRecipes = appCache.getRecipes();
+      
+      if (allRecipes) {
+        console.log('📦 RecipeDetail: Using cached recipes');
+      } else {
+        console.log('🔄 RecipeDetail: Fetching recipes from API (cache miss)');
+        allRecipes = await Recipe.list();
+        appCache.setRecipes(allRecipes);
+      }
+      
       const foundRecipe = allRecipes.find((r) => r.id === recipeId);
       if (foundRecipe) {
-        setRecipe(foundRecipe); // Set recipe first
+        setRecipe(foundRecipe);
 
         // Call the common function to load user and favorite status
         loadUserAndFavorite(foundRecipe.id);
@@ -263,6 +275,48 @@ export default function RecipeDetailPage() {
       description: `User shared recipe "${recipe.full_title}" via ${platform}`,
       user_id: user.id
     });
+  };
+
+  // Handle delete recipe
+  const handleDeleteRecipe = async () => {
+    if (!user || !recipe) return;
+    
+    setDeleting(true);
+    try {
+      // Delete the recipe
+      await Recipe.delete(recipe.id);
+      
+      // Decrement custom recipes count for this user
+      const currentUser = await User.me();
+      const newRecipeCount = Math.max(0, (currentUser.current_custom_recipes || 1) - 1);
+      await User.updateMe({ current_custom_recipes: newRecipeCount });
+      
+      // Update statistics - atomic decrement total_user_generated_recipes
+      await updateStatCount('total_user_generated_recipes', -1);
+      
+      // Clear recipes cache
+      appCache.clearRecipes();
+      appCache.clearUser();
+      
+      // Track activity
+      ActivityTracking.create({
+        operation_type: 'DELETE',
+        page: 'RecipeDetail',
+        operation_name: 'Delete Custom Recipe',
+        description: `User deleted custom recipe "${recipe.full_title}"`,
+        user_id: user.id,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Navigate back to My Recipes
+      navigate(createPageUrl('MyRecipes'));
+    } catch (error) {
+      console.error("Error deleting recipe:", error);
+      alert("Failed to delete recipe. Please try again.");
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
   };
 
   const handleEditClick = async () => {
@@ -638,8 +692,15 @@ export default function RecipeDetailPage() {
       console.log('Recipe ingredients to process:', recipe.ingredients);
       console.log('Ingredients count:', recipe.ingredients?.length || 0);
       
+      // Normalize ingredients to strings (handle both string and object formats)
+      const normalizedIngredients = recipe.ingredients.map(ing => {
+        if (typeof ing === 'string') return ing;
+        // Object format: { name, quantity, notes }
+        return (ing.quantity ? `${ing.quantity} ${ing.name}` : ing.name) + (ing.notes ? ` (${ing.notes})` : '');
+      });
+      
       // Use LLM to extract clean ingredient names and categorize in ONE call
-      const ingredientsList = recipe.ingredients.map((ing, idx) => `${idx + 1}. ${ing}`).join('\n');
+      const ingredientsList = normalizedIngredients.map((ing, idx) => `${idx + 1}. ${ing}`).join('\n');
       console.log('Formatted ingredients list for LLM:', ingredientsList);
       
       const extractionResponse = await InvokeLLM({
@@ -1073,6 +1134,17 @@ Return JSON with an array of objects, each containing:
                 )} />
 
             </Button>
+            {/* Delete Button - Only for user's own recipes */}
+            {recipe?.is_user_generated && recipe?.generated_by_user_id === user?.id && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="border-2 border-red-400 hover:bg-red-50 dark:border-red-600 dark:hover:bg-red-900/20 h-9 w-9 sm:h-10 sm:w-10"
+                title="Delete Recipe">
+                <Trash2 className="w-4 h-4 sm:w-5 sm:h-5 text-red-500 dark:text-red-400" />
+              </Button>
+            )}
             {/* Edit/Customize Button - Hidden on mobile, show below */}
             <Button
               onClick={handleEditClick}
@@ -1632,33 +1704,41 @@ Return JSON with an array of objects, each containing:
                   }
                 </div>
                 <div className="space-y-2">
-                  {(displayRecipe.ingredients || []).map((ingredient, idx) =>
-                    <div key={idx} className="flex items-start gap-2">
-                      {isEditMode ?
-                        <>
-                          <Input
-                            value={ingredient}
-                            onChange={(e) => updateIngredient(idx, e.target.value)}
-                            placeholder="e.g., 2 cups all-purpose flour"
-                            className="flex-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700" />
+                  {(displayRecipe.ingredients || []).map((ingredient, idx) => {
+                    // Handle both string and object formats for ingredients
+                    // Object format: { name, quantity, notes } | String format: "2 cups flour"
+                    const ingredientText = typeof ingredient === 'string' 
+                      ? ingredient 
+                      : (ingredient.quantity ? `${ingredient.quantity} ${ingredient.name}` : ingredient.name) + (ingredient.notes ? ` (${ingredient.notes})` : '');
+                    
+                    return (
+                      <div key={idx} className="flex items-start gap-2">
+                        {isEditMode ?
+                          <>
+                            <Input
+                              value={ingredientText}
+                              onChange={(e) => updateIngredient(idx, e.target.value)}
+                              placeholder="e.g., 2 cups all-purpose flour"
+                              className="flex-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700" />
 
-                          <Button
-                            onClick={() => removeIngredient(idx)}
-                            size="icon"
-                            variant="ghost"
-                            className="text-red-500 hover:text-red-700 flex-shrink-0 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20">
+                            <Button
+                              onClick={() => removeIngredient(idx)}
+                              size="icon"
+                              variant="ghost"
+                              className="text-red-500 hover:text-red-700 flex-shrink-0 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20">
 
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </> :
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </> :
 
-                        <>
-                          <span className="text-orange-500 font-bold mt-1 shrink-0">•</span>
-                          <span className="text-sm sm:text-base text-slate-700 dark:text-slate-300 break-words">{ingredient}</span>
-                        </>
-                      }
-                    </div>
-                  )}
+                          <>
+                            <span className="text-orange-500 font-bold mt-1 shrink-0">•</span>
+                            <span className="text-sm sm:text-base text-slate-700 dark:text-slate-300 break-words">{ingredientText}</span>
+                          </>
+                        }
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1688,6 +1768,21 @@ Return JSON with an array of objects, each containing:
                 </div>
                 <div className="space-y-3">
                   {(displayRecipe.steps || []).map((step, idx) => {
+                    // Normalize step format - handle string, different property names, etc.
+                    // Expected: { title: string, instruction: string }
+                    // Possible formats: string, { name, description }, { step, details }, { title, text }, etc.
+                    const normalizeStep = (s) => {
+                      if (typeof s === 'string') {
+                        return { title: `Step ${idx + 1}`, instruction: s };
+                      }
+                      return {
+                        title: s.title || s.name || s.step || s.heading || `Step ${idx + 1}`,
+                        instruction: s.instruction || s.description || s.details || s.text || s.content || s.instructions || ''
+                      };
+                    };
+                    
+                    const normalizedStep = normalizeStep(step);
+                    
                     if (isEditMode) {
                       return (
                         <Card key={idx} className={cn(
@@ -1702,7 +1797,7 @@ Return JSON with an array of objects, each containing:
                                 Step {idx + 1}
                               </Badge>
                               <Input
-                                value={step.title}
+                                value={normalizedStep.title}
                                 onChange={(e) => updateStep(idx, 'title', e.target.value)}
                                 placeholder="Step title..."
                                 className="flex-1 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600" />
@@ -1717,7 +1812,7 @@ Return JSON with an array of objects, each containing:
                               </Button>
                             </div>
                             <Textarea
-                              value={step.instruction}
+                              value={normalizedStep.instruction}
                               onChange={(e) => updateStep(idx, 'instruction', e.target.value)}
                               placeholder="Step instructions..."
                               rows={3}
@@ -1770,7 +1865,7 @@ Return JSON with an array of objects, each containing:
                                   "text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100 break-words",
                                   isCompleted && "line-through text-slate-500 dark:text-slate-400"
                                 )}>
-                                  {step.title}
+                                  {normalizedStep.title}
                                 </h4>
                               </div>
                             </button>
@@ -1819,7 +1914,7 @@ Return JSON with an array of objects, each containing:
                                   "text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed break-words",
                                   isCompleted && "line-through"
                                 )}>
-                                  {step.instruction}
+                                  {normalizedStep.instruction}
                                 </p>
                               </motion.div>
                             }
@@ -1871,6 +1966,46 @@ Return JSON with an array of objects, each containing:
         feature={signupFeature}
         recipeName={recipe?.full_title}
       />
+
+      {/* Delete Recipe Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="sm:max-w-md !bg-white dark:!bg-slate-900 dark:!border-slate-700">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 !text-slate-800 dark:!text-white">
+              <Trash2 className="w-5 h-5 text-red-500" />
+              Delete Recipe
+            </DialogTitle>
+            <DialogDescription className="!text-slate-600 dark:!text-slate-400">
+              Are you sure you want to delete "{recipe?.full_title}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={deleting}
+              className="!bg-white dark:!bg-slate-700 !text-slate-800 dark:!text-slate-100 !border-slate-300 dark:!border-slate-600">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeleteRecipe}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 text-white">
+              {deleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>);
 
