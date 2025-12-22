@@ -126,14 +126,17 @@ export default function MasterRecipeListPage() {
 
       const recipePrompt = `Create a detailed recipe for: ${newRecipeName.trim()}
 
-Return a JSON with:
+Return a JSON with these exact fields:
 - full_title: Complete dish name
 - cooking_time: Duration (e.g., "30-45 minutes")
 - cuisine: One of: Italian, Indian / Pakistani, Chinese, Mexican, French, Japanese, Thai, Middle Eastern, American, Spanish, Mediterranean, Greek, Global Classics, Others
 - servings: Number of servings (integer)
 - calories_per_serving: Calorie range (e.g., "350-400 cal")
-- ingredients: Array of ingredient strings with quantities
-- steps: Array of objects with "title" and "instruction" fields`;
+- ingredients: Array of strings, each containing quantity and ingredient (e.g., "2 cups flour")
+- steps: Array of objects, each with EXACTLY these two properties:
+  - "title": string (short step title like "Prepare the Mixture")
+  - "instruction": string (detailed step instructions - IMPORTANT: include ingredient quantities in each step, e.g. "Add 2 cups of flour and 1 tsp of salt" instead of just "Add flour and salt")
+Do NOT use "description", "step_number", "name", or any other property names for steps.`;
 
       const recipeData = await InvokeLLM({
         prompt: recipePrompt,
@@ -256,14 +259,17 @@ Return a JSON with:
 
           const recipePrompt = `Create a detailed recipe for: ${dishName}
 
-Return a JSON with:
+Return a JSON with these exact fields:
 - full_title: Complete dish name
 - cooking_time: Duration (e.g., "30-45 minutes")
 - cuisine: One of: Italian, Indian / Pakistani, Chinese, Mexican, French, Japanese, Thai, Middle Eastern, American, Spanish, Mediterranean, Greek, Global Classics, Others
 - servings: Number of servings (integer)
 - calories_per_serving: Calorie range (e.g., "350-400 cal")
-- ingredients: Array of ingredient strings with quantities
-- steps: Array of objects with "title" and "instruction" fields`;
+- ingredients: Array of strings, each containing quantity and ingredient (e.g., "2 cups flour")
+- steps: Array of objects, each with EXACTLY these two properties:
+  - "title": string (short step title like "Prepare the Mixture")
+  - "instruction": string (detailed step instructions - IMPORTANT: include ingredient quantities in each step, e.g. "Add 2 cups of flour and 1 tsp of salt" instead of just "Add flour and salt")
+Do NOT use "description", "step_number", "name", or any other property names for steps.`;
 
           const recipeData = await InvokeLLM({
             prompt: recipePrompt,

@@ -74,7 +74,7 @@ async function invokeLLM_OpenAI(prompt: string, responseJsonSchema: object | nul
   const messages = [
     {
       role: "system",
-      content: "You are a helpful assistant. Always respond with valid JSON matching the requested schema.",
+      content: "You are a helpful assistant. Always respond with valid JSON matching the EXACT schema requested. Follow the schema strictly:\n- If a field is specified as a string, return a string, not an object.\n- If ingredients are specified as an array of strings, return strings like '2 cups flour', not objects.\n- If steps are specified with 'title' and 'instruction' properties, use those exact property names, not alternatives like 'name', 'description', 'text', etc.\n- For recipe instructions, ALWAYS include ingredient quantities (e.g., 'Add 2 cups of flour' instead of 'Add flour').",
     },
     {
       role: "user",

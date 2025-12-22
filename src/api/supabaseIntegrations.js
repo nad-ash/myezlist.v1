@@ -100,9 +100,10 @@ export async function InvokeLLM({ prompt, response_json_schema, useCase = 'defau
 /**
  * Generate Image
  * Calls the ai-generate-image Edge Function which handles OpenAI/Gemini securely
+ * Images are automatically uploaded to Supabase Storage and a permanent URL is returned
  * @param {Object} params - { prompt }
  * @param {string} params.prompt - The image generation prompt
- * @returns {Promise<Object>} - { url: string, isBase64?: boolean }
+ * @returns {Promise<Object>} - { url: string } - Supabase Storage URL
  */
 export async function GenerateImage({ prompt }) {
   try {
@@ -110,7 +111,7 @@ export async function GenerateImage({ prompt }) {
     
     const result = await callEdgeFunction('ai-generate-image', { prompt });
     
-    console.log(`✅ Image generated (isBase64: ${result.isBase64 || false})`);
+    console.log(`✅ Image generated: ${result.url?.substring(0, 50)}...`);
     return result;
   } catch (error) {
     console.error('GenerateImage error:', error);

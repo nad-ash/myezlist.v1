@@ -165,7 +165,17 @@ export default function MyRecipesPage() {
     if (!searchTerm.trim()) { alert('Please enter a dish name'); return; }
     setGenerating(true); setCurrentStatus('Generating recipe details...');
     try {
-      const recipePrompt = `Generate a detailed recipe for: "${searchTerm}". Return JSON with: full_title, cooking_time, cuisine (from: ${allCuisines.join(', ')}), servings, calories_per_serving, ingredients, steps.`;
+      const recipePrompt = `Generate a detailed recipe for: "${searchTerm}". Return JSON with these exact fields:
+- full_title: string (the complete dish name)
+- cooking_time: string (e.g. "30-45 minutes")
+- cuisine: string (one of: ${allCuisines.join(', ')})
+- servings: integer
+- calories_per_serving: string (e.g. "350-400 cal")
+- ingredients: array of strings, each string containing quantity and ingredient (e.g. "2 cups all-purpose flour", "1 tsp vanilla extract")
+- steps: array of objects, each with EXACTLY these two properties:
+  - "title": string (short step title like "Prepare the Mixture")
+  - "instruction": string (detailed step instructions - IMPORTANT: include ingredient quantities in each step, e.g. "Add 2 cups of flour and 1 tsp of salt" instead of just "Add flour and salt")
+Do NOT use "description", "step_number", "name", or any other property names for steps.`;
       const response = await InvokeLLM({
         prompt: recipePrompt,
         response_json_schema: {
