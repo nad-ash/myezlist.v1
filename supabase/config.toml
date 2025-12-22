@@ -5,3 +5,10 @@
 # Stripe authenticates via stripe-signature header, not Supabase JWT
 verify_jwt = false
 
+# AI Edge Functions (require authentication by default)
+# These functions call OpenAI/Gemini APIs with secrets stored server-side
+[functions.ai-invoke-llm]
+# verify_jwt = true (default - requires user authentication)
+
+[functions.ai-generate-image]
+# verify_jwt = true (default - requires user authentication)

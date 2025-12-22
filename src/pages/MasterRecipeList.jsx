@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { consumeCredits, checkCreditsAvailable } from "@/components/utils/creditManager";
+import { useRecipeLoadingPhrases } from "@/hooks/useRecipeLoadingPhrases";
 
 export default function MasterRecipeListPage() {
   const navigate = useNavigate();
@@ -37,12 +38,16 @@ export default function MasterRecipeListPage() {
   const [showBulkGenerateDialog, setShowBulkGenerateDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false); // New state for import dialog
   const [generating, setGenerating] = useState(false);
+  const [generationStage, setGenerationStage] = useState('recipe'); // 'recipe', 'image', 'saving'
   const [bulkGenerating, setBulkGenerating] = useState(false);
   const [importLoading, setImportLoading] = useState(false); // New state for import loading
   const [newRecipeName, setNewRecipeName] = useState('');
   const [bulkDishNames, setBulkDishNames] = useState('');
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0, currentDish: '' });
   const [isDarkMode, setIsDarkMode] = useState(false);
+  
+  // Rotating loading phrases
+  const loadingPhrase = useRecipeLoadingPhrases(generating, generationStage);
 
   useEffect(() => {
     loadRecipes();
@@ -110,6 +115,7 @@ export default function MasterRecipeListPage() {
     }
 
     setGenerating(true);
+    setGenerationStage('recipe');
     try {
       const user = await User.me();
 
@@ -126,14 +132,17 @@ export default function MasterRecipeListPage() {
 
       const recipePrompt = `Create a detailed recipe for: ${newRecipeName.trim()}
 
-Return a JSON with:
+Return a JSON with these exact fields:
 - full_title: Complete dish name
 - cooking_time: Duration (e.g., "30-45 minutes")
 - cuisine: One of: Italian, Indian / Pakistani, Chinese, Mexican, French, Japanese, Thai, Middle Eastern, American, Spanish, Mediterranean, Greek, Global Classics, Others
 - servings: Number of servings (integer)
 - calories_per_serving: Calorie range (e.g., "350-400 cal")
-- ingredients: Array of ingredient strings with quantities
-- steps: Array of objects with "title" and "instruction" fields`;
+- ingredients: Array of strings, each containing quantity and ingredient (e.g., "2 cups flour")
+- steps: Array of objects, each with EXACTLY these two properties:
+  - "title": string (short step title like "Prepare the Mixture")
+  - "instruction": string (detailed step instructions - IMPORTANT: include ingredient quantities in each step, e.g. "Add 2 cups of flour and 1 tsp of salt" instead of just "Add flour and salt")
+Do NOT use "description", "step_number", "name", or any other property names for steps.`;
 
       const recipeData = await InvokeLLM({
         prompt: recipePrompt,
@@ -165,6 +174,7 @@ Return a JSON with:
       });
 
       // Generate dish image
+      setGenerationStage('image');
       const imagePrompt = `Professional food photography of ${recipeData.full_title}, beautifully plated, well-lit, appetizing, restaurant quality`;
       let photoUrl = '';
       try {
@@ -174,6 +184,7 @@ Return a JSON with:
         console.warn('Image generation failed:', error);
       }
 
+      setGenerationStage('saving');
       await Recipe.create({
         recipe_name: newRecipeName.trim(),
         full_title: recipeData.full_title,
@@ -256,14 +267,17 @@ Return a JSON with:
 
           const recipePrompt = `Create a detailed recipe for: ${dishName}
 
-Return a JSON with:
+Return a JSON with these exact fields:
 - full_title: Complete dish name
 - cooking_time: Duration (e.g., "30-45 minutes")
 - cuisine: One of: Italian, Indian / Pakistani, Chinese, Mexican, French, Japanese, Thai, Middle Eastern, American, Spanish, Mediterranean, Greek, Global Classics, Others
 - servings: Number of servings (integer)
 - calories_per_serving: Calorie range (e.g., "350-400 cal")
-- ingredients: Array of ingredient strings with quantities
-- steps: Array of objects with "title" and "instruction" fields`;
+- ingredients: Array of strings, each containing quantity and ingredient (e.g., "2 cups flour")
+- steps: Array of objects, each with EXACTLY these two properties:
+  - "title": string (short step title like "Prepare the Mixture")
+  - "instruction": string (detailed step instructions - IMPORTANT: include ingredient quantities in each step, e.g. "Add 2 cups of flour and 1 tsp of salt" instead of just "Add flour and salt")
+Do NOT use "description", "step_number", "name", or any other property names for steps.`;
 
           const recipeData = await InvokeLLM({
             prompt: recipePrompt,
@@ -631,8 +645,8 @@ Return a JSON with:
             {generating && (
               <div className="text-center py-4">
                 <Loader2 className="w-8 h-8 animate-spin text-orange-500 mx-auto mb-2" />
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Generating recipe with AI... (10-15 seconds)
+                <p className="text-sm font-medium text-blue-600 dark:text-blue-400 animate-pulse">
+                  {loadingPhrase}
                 </p>
               </div>
             )}
