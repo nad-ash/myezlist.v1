@@ -159,6 +159,16 @@ class SupabaseEntity {
     
     // Track activity if context provided (and not tracking activity_tracking itself)
     if (trackingContext && activityTrackingEntity && this.tableName !== 'activity_tracking') {
+      // Debug: Check auth state before activity tracking
+      supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+        console.log('🔍 Activity Tracking Debug:', {
+          trackingUserId: trackingContext.userId,
+          authUid: authUser?.id,
+          match: trackingContext.userId === authUser?.id,
+          operation: trackingContext.operationName
+        });
+      });
+      
       activityTrackingEntity.create({
         operation_type: 'CREATE',
         page: trackingContext.page,
@@ -200,6 +210,16 @@ class SupabaseEntity {
     
     // Track activity if context provided (and not tracking activity_tracking itself)
     if (trackingContext && activityTrackingEntity && this.tableName !== 'activity_tracking') {
+      // Debug: Check auth state before activity tracking
+      supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+        console.log('🔍 Activity Tracking Debug (UPDATE):', {
+          trackingUserId: trackingContext.userId,
+          authUid: authUser?.id,
+          match: trackingContext.userId === authUser?.id,
+          operation: trackingContext.operationName
+        });
+      });
+      
       activityTrackingEntity.create({
         operation_type: 'UPDATE',
         page: trackingContext.page,
@@ -231,6 +251,16 @@ class SupabaseEntity {
     
     // Track activity if context provided (and not tracking activity_tracking itself)
     if (trackingContext && activityTrackingEntity && this.tableName !== 'activity_tracking') {
+      // Debug: Check auth state before activity tracking
+      supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+        console.log('🔍 Activity Tracking Debug (DELETE):', {
+          trackingUserId: trackingContext.userId,
+          authUid: authUser?.id,
+          match: trackingContext.userId === authUser?.id,
+          operation: trackingContext.operationName
+        });
+      });
+      
       activityTrackingEntity.create({
         operation_type: 'DELETE',
         page: trackingContext.page,
