@@ -85,15 +85,15 @@ export default function JoinListViaLink() {
         status: 'pending'
       });
 
-      // Track activity using standardized operation
-      await ActivityTracking.create({
+      // Track activity using standardized operation (fire and forget)
+      ActivityTracking.create({
         operation_type: 'CREATE',
         page: PAGES.JOIN_LIST,
         operation_name: OPERATIONS.LIST_MEMBER.JOIN,
         description: `User joined shopping list "${list.name}" via share link`,
         user_id: currentUser.id,
         timestamp: new Date().toISOString()
-      });
+      }).catch(err => console.warn('Activity tracking failed:', err));
 
       setStatus('pending');
       setMessage(`Access request sent! The owner of "${list.name}" will review your request.`);

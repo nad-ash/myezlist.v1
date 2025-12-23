@@ -274,7 +274,7 @@ export default function RecipeDetailPage() {
       operation_name: 'Share Recipe',
       description: `User shared recipe "${recipe.full_title}" via ${platform}`,
       user_id: user.id
-    });
+    }).catch(err => console.warn('Activity tracking failed:', err));
   };
 
   // Handle delete recipe
@@ -321,7 +321,7 @@ export default function RecipeDetailPage() {
       description: `User deleted custom recipe "${recipe.full_title}"`,
       user_id: user.id,
       timestamp: new Date().toISOString()
-    });
+    }).catch(err => console.warn('Activity tracking failed:', err));
     
     setDeleting(false);
     setShowDeleteConfirm(false);
@@ -413,7 +413,7 @@ export default function RecipeDetailPage() {
           operation_name: 'Update Custom Recipe',
           description: `User updated custom recipe "${editedRecipe.full_title}"`,
           user_id: user.id
-        });
+        }).catch(err => console.warn('Activity tracking failed:', err));
 
         // Clear recipes cache
         appCache.clearRecipes();
@@ -453,7 +453,7 @@ export default function RecipeDetailPage() {
           operation_name: 'Save Customized Recipe',
           description: `User saved customized version of "${recipe.full_title}" as "${editedRecipe.full_title}"`,
           user_id: user.id
-        });
+        }).catch(err => console.warn('Activity tracking failed:', err));
 
         // Clear recipes cache
         appCache.clearRecipes();
@@ -1053,7 +1053,7 @@ Return JSON with an array of objects, each containing:
         description: `User added ${itemsToImport.length} ingredients from recipe "${recipe.full_title}" to list "${listName}"`,
         user_id: user.id,
         timestamp: new Date().toISOString()
-      });
+      }).catch(err => console.warn('Activity tracking failed:', err));
 
       setImportProgress({ current: itemsToImport.length, total: itemsToImport.length });
       setImportStatus('Complete!');

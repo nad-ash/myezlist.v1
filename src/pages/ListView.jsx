@@ -783,7 +783,7 @@ export default function ListViewPage() {
             description: `User created share link for list "${list.name}"`,
             user_id: user.id,
             timestamp: new Date().toISOString()
-          });
+          }).catch(err => console.warn('Activity tracking failed:', err));
         }}
       />
 
