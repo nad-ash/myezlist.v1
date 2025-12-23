@@ -232,7 +232,7 @@ export default function ShoppingModeActivePage() {
             description: `User completed shopping for list "${selectedList?.name}" by checking all remaining items`,
             user_id: user.id,
             timestamp: new Date().toISOString()
-          });
+          }).catch(err => console.warn('Activity tracking failed:', err));
         }
 
         // ✅ Invalidate cache since items changed

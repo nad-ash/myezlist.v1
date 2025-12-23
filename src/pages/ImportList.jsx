@@ -374,7 +374,7 @@ export default function ImportListPage() {
           description: `User created list "${newListName.trim()}" via bulk import`,
           user_id: currentUser.id,
           timestamp: new Date().toISOString()
-        });
+        }).catch(err => console.warn('Activity tracking failed:', err));
 
         // Clear caches so ListView can see the new list and membership
         const { appCache } = await import('@/components/utils/appCache');
@@ -665,7 +665,7 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
           description: `User imported ${itemsCreatedCount} items to list "${listName}"`,
           user_id: currentUser.id,
           timestamp: new Date().toISOString()
-        });
+        }).catch(err => console.warn('Activity tracking failed:', err));
       }
 
       setCurrentStatus(`Import complete! Navigating to list...`);
