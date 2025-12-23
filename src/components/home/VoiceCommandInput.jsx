@@ -119,24 +119,44 @@ export default function VoiceCommandInput({ userLists, onItemAdded }) {
       let foundInCommonItems = false;
 
       try {
-        // Search for the item in common_items (case-insensitive match)
+        // Search for the item in common_items with smart matching
         const allCommonItems = await CommonItem.list();
         const normalizedItemName = capitalizedName.toLowerCase().trim();
         
-        // Try exact match first, then partial match
+        // 1. Try exact match first
         let matchedCommonItem = allCommonItems.find(
           ci => ci.name?.toLowerCase().trim() === normalizedItemName ||
                 ci.display_name?.toLowerCase().trim() === normalizedItemName
         );
         
-        // If no exact match, try partial match
+        // 2. Try "starts with" match - prefer shorter names (closer matches)
+        if (!matchedCommonItem) {
+          const startsWithMatches = allCommonItems
+            .filter(ci => 
+              ci.name?.toLowerCase().startsWith(normalizedItemName) ||
+              ci.display_name?.toLowerCase().startsWith(normalizedItemName)
+            )
+            .sort((a, b) => (a.name?.length || 0) - (b.name?.length || 0));
+          matchedCommonItem = startsWithMatches[0] || null;
+        }
+        
+        // 3. Try reverse "starts with" (e.g., "oranges" typed matches "orange" in db)
         if (!matchedCommonItem) {
           matchedCommonItem = allCommonItems.find(
-            ci => ci.name?.toLowerCase().includes(normalizedItemName) ||
-                  ci.display_name?.toLowerCase().includes(normalizedItemName) ||
-                  normalizedItemName.includes(ci.name?.toLowerCase()) ||
-                  normalizedItemName.includes(ci.display_name?.toLowerCase())
+            ci => normalizedItemName.startsWith(ci.name?.toLowerCase()) ||
+                  normalizedItemName.startsWith(ci.display_name?.toLowerCase())
           );
+        }
+        
+        // 4. Fall back to contains match - prefer shorter names
+        if (!matchedCommonItem) {
+          const containsMatches = allCommonItems
+            .filter(ci => 
+              ci.name?.toLowerCase().includes(normalizedItemName) ||
+              ci.display_name?.toLowerCase().includes(normalizedItemName)
+            )
+            .sort((a, b) => (a.name?.length || 0) - (b.name?.length || 0));
+          matchedCommonItem = containsMatches[0] || null;
         }
 
         if (matchedCommonItem) {

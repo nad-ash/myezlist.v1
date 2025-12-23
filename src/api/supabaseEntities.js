@@ -3,16 +3,9 @@
  * 
  * This file provides entity classes that match the Base44 entity interface.
  * Each entity supports: list(), filter(), create(), update(), delete()
- * 
- * Activity Tracking:
- * - Pass optional trackingContext to create/update/delete for automatic tracking
- * - trackingContext: { page, operationName, userId, description }
  */
 
 import { supabase } from './supabaseClient';
-
-// Internal reference for activity tracking (set after entities are created)
-let activityTrackingEntity = null;
 
 /**
  * Base Entity class that provides common CRUD operations
@@ -131,10 +124,9 @@ class SupabaseEntity {
 
   /**
    * Create a new record
-   * @param {Object} recordData - Record data
-   * @param {Object} trackingContext - Optional tracking context { page, operationName, userId, description }
+   * @param {Object} data - Record data
    */
-  async create(recordData, trackingContext = null) {
+  async create(recordData) {
     // Build the insert data with proper column names
     const insertData = { ...recordData };
     
@@ -157,38 +149,15 @@ class SupabaseEntity {
       throw error;
     }
     
-    // Track activity if context provided (and not tracking activity_tracking itself)
-    if (trackingContext && activityTrackingEntity && this.tableName !== 'activity_tracking') {
-      // Debug: Check auth state before activity tracking
-      supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-        console.log('🔍 Activity Tracking Debug:', {
-          trackingUserId: trackingContext.userId,
-          authUid: authUser?.id,
-          match: trackingContext.userId === authUser?.id,
-          operation: trackingContext.operationName
-        });
-      });
-      
-      activityTrackingEntity.create({
-        operation_type: 'CREATE',
-        page: trackingContext.page,
-        operation_name: trackingContext.operationName,
-        description: trackingContext.description,
-        user_id: trackingContext.userId,
-        timestamp: new Date().toISOString()
-      }).catch(err => console.warn('Activity tracking failed:', err));
-    }
-    
     return data;
   }
 
   /**
    * Update an existing record
    * @param {string} id - Record ID
-   * @param {Object} updateData - Fields to update
-   * @param {Object} trackingContext - Optional tracking context { page, operationName, userId, description }
+   * @param {Object} data - Fields to update
    */
-  async update(id, updateData, trackingContext = null) {
+  async update(id, updateData) {
     const dataToUpdate = { ...updateData };
     
     // Add updated timestamp if the table has it
@@ -208,37 +177,14 @@ class SupabaseEntity {
       throw error;
     }
     
-    // Track activity if context provided (and not tracking activity_tracking itself)
-    if (trackingContext && activityTrackingEntity && this.tableName !== 'activity_tracking') {
-      // Debug: Check auth state before activity tracking
-      supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-        console.log('🔍 Activity Tracking Debug (UPDATE):', {
-          trackingUserId: trackingContext.userId,
-          authUid: authUser?.id,
-          match: trackingContext.userId === authUser?.id,
-          operation: trackingContext.operationName
-        });
-      });
-      
-      activityTrackingEntity.create({
-        operation_type: 'UPDATE',
-        page: trackingContext.page,
-        operation_name: trackingContext.operationName,
-        description: trackingContext.description,
-        user_id: trackingContext.userId,
-        timestamp: new Date().toISOString()
-      }).catch(err => console.warn('Activity tracking failed:', err));
-    }
-    
     return data;
   }
 
   /**
    * Delete a record
    * @param {string} id - Record ID
-   * @param {Object} trackingContext - Optional tracking context { page, operationName, userId, description }
    */
-  async delete(id, trackingContext = null) {
+  async delete(id) {
     const { error } = await supabase
       .from(this.tableName)
       .delete()
@@ -247,28 +193,6 @@ class SupabaseEntity {
     if (error) {
       console.error(`Error deleting ${this.tableName}:`, error);
       throw error;
-    }
-    
-    // Track activity if context provided (and not tracking activity_tracking itself)
-    if (trackingContext && activityTrackingEntity && this.tableName !== 'activity_tracking') {
-      // Debug: Check auth state before activity tracking
-      supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-        console.log('🔍 Activity Tracking Debug (DELETE):', {
-          trackingUserId: trackingContext.userId,
-          authUid: authUser?.id,
-          match: trackingContext.userId === authUser?.id,
-          operation: trackingContext.operationName
-        });
-      });
-      
-      activityTrackingEntity.create({
-        operation_type: 'DELETE',
-        page: trackingContext.page,
-        operation_name: trackingContext.operationName,
-        description: trackingContext.description,
-        user_id: trackingContext.userId,
-        timestamp: new Date().toISOString()
-      }).catch(err => console.warn('Activity tracking failed:', err));
     }
     
     return true;
@@ -314,6 +238,3 @@ export const PremiumFeature = new SupabaseEntity('premium_features');
 
 // User Admin (for admin operations)
 export const UserAdmin = new SupabaseEntity('profiles');
-
-// Set activity tracking entity reference (for internal use by other entities)
-activityTrackingEntity = ActivityTracking;

@@ -83,10 +83,37 @@ export default function FastAddItemInput({ listId, onItemAdded }) {
       const isOrganic = /\borganic\b/gi.test(value);
       const normalized = value.toLowerCase().trim().replace(/\borganic\b/gi, '').trim();
       
-      const matches = commonItemsCache
-        .filter(ci => 
-          ci.name.includes(normalized) || ci.display_name.toLowerCase().includes(normalized)
-        )
+      // Score matches to prioritize better results
+      // Higher score = better match
+      const scoredMatches = commonItemsCache
+        .map(ci => {
+          const name = ci.name.toLowerCase();
+          const displayName = ci.display_name.toLowerCase();
+          
+          let score = 0;
+          
+          // Exact match gets highest score
+          if (name === normalized || displayName === normalized) {
+            score = 1000;
+          }
+          // Starts with search term (e.g., "orange" matches "oranges")
+          else if (name.startsWith(normalized) || displayName.startsWith(normalized)) {
+            score = 500 - name.length; // Prefer shorter names
+          }
+          // Search term starts with item name (e.g., "oranges" typed, "orange" in list)
+          else if (normalized.startsWith(name) || normalized.startsWith(displayName)) {
+            score = 400 - name.length;
+          }
+          // Contains search term
+          else if (name.includes(normalized) || displayName.includes(normalized)) {
+            score = 100 - name.length; // Prefer shorter names
+          }
+          
+          return { ...ci, _score: score };
+        })
+        .filter(ci => ci._score > 0)
+        .sort((a, b) => b._score - a._score)
+        .slice(0, 5)
         .map(ci => ({
           ...ci,
           // Show "Organic [Item]" if user typed organic and it's not already in the name
@@ -94,11 +121,10 @@ export default function FastAddItemInput({ listId, onItemAdded }) {
             ? `Organic ${ci.display_name}`
             : ci.display_name,
           _isOrganic: isOrganic
-        }))
-        .slice(0, 5);
+        }));
       
-      setSuggestions(matches);
-      setShowSuggestions(matches.length > 0);
+      setSuggestions(scoredMatches);
+      setShowSuggestions(scoredMatches.length > 0);
     } else {
       setSuggestions([]);
       setShowSuggestions(false);
@@ -172,7 +198,33 @@ export default function FastAddItemInput({ listId, onItemAdded }) {
         setCurrentStatus('Using selected item data...');
       } else {
         setCurrentStatus('Checking item database...');
-        commonItemFound = commonItemsCache.find(ci => ci.name === normalizedNameForLookup);
+        
+        // Smart matching: exact match first, then best partial match
+        // 1. Try exact match
+        commonItemFound = commonItemsCache.find(ci => 
+          ci.name === normalizedNameForLookup || 
+          ci.display_name.toLowerCase() === normalizedNameForLookup
+        );
+        
+        // 2. Try "starts with" match (e.g., "orange" matches "oranges")
+        if (!commonItemFound) {
+          const startsWithMatches = commonItemsCache
+            .filter(ci => 
+              ci.name.startsWith(normalizedNameForLookup) || 
+              ci.display_name.toLowerCase().startsWith(normalizedNameForLookup)
+            )
+            .sort((a, b) => a.name.length - b.name.length); // Prefer shorter (closer) matches
+          commonItemFound = startsWithMatches[0] || null;
+        }
+        
+        // 3. Try reverse "starts with" (e.g., "oranges" typed matches "orange" in db)
+        if (!commonItemFound) {
+          commonItemFound = commonItemsCache.find(ci => 
+            normalizedNameForLookup.startsWith(ci.name) || 
+            normalizedNameForLookup.startsWith(ci.display_name.toLowerCase())
+          );
+        }
+        
         if (commonItemFound) {
           setCurrentStatus('Using existing item data...');
         }
