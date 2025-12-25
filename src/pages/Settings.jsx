@@ -160,14 +160,8 @@ export default function SettingsPage() {
     
     setUpgrading(true);
     try {
-      const { data } = await createCheckoutSession({ tier: tierName });
-      
-      if (data.url) {
-        // Redirect to Stripe Checkout
-        window.location.href = data.url;
-      } else {
-        throw new Error('No checkout URL returned');
-      }
+      // createCheckoutSession handles the redirect internally
+      await createCheckoutSession({ tier: tierName });
     } catch (error) {
       console.error("Error creating checkout session:", error);
       alert("Failed to start checkout. Please try again.");

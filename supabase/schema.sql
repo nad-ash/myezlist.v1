@@ -368,6 +368,23 @@ ALTER TABLE public.subscription_tiers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.premium_features ENABLE ROW LEVEL SECURITY;
 
 -- ===========================================
+-- FUNCTION: is_admin
+-- Helper function to check if current user is an admin
+-- ===========================================
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid()
+    AND role = 'admin'
+  );
+$$;
+
+-- ===========================================
 -- RLS POLICIES: profiles
 -- ===========================================
 CREATE POLICY "Users can insert own profile" ON public.profiles 
@@ -376,8 +393,8 @@ CREATE POLICY "Users can insert own profile" ON public.profiles
 CREATE POLICY "Users can update own profile" ON public.profiles 
     FOR UPDATE USING ((auth.uid() = id));
 
-CREATE POLICY "Users can view own profile" ON public.profiles 
-    FOR SELECT USING ((auth.uid() = id));
+CREATE POLICY "Users can view own profile, admins can view all" ON public.profiles 
+    FOR SELECT USING (((auth.uid() = id) OR is_admin()));
 
 -- ===========================================
 -- RLS POLICIES: shopping_lists
