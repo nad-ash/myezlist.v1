@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { User, Item, ActivityTracking, CommonItem } from "@/api/entities";
+import { supabase } from "@/api/supabaseClient";
 import { updateStatCount } from "@/api/functions";
 import { InvokeLLM, GenerateImage } from "@/api/integrations";
 import { consumeCredits, checkCreditsAvailable } from "@/components/utils/creditManager";
@@ -82,11 +83,56 @@ export default function FastAddItemInput({ listId, onItemAdded }) {
     if (value.trim().length >= 3) {
       const isOrganic = /\borganic\b/gi.test(value);
       const normalized = value.toLowerCase().trim().replace(/\borganic\b/gi, '').trim();
+      const normalizedWords = normalized.split(/\s+/);
       
-      const matches = commonItemsCache
-        .filter(ci => 
-          ci.name.includes(normalized) || ci.display_name.toLowerCase().includes(normalized)
-        )
+      // Score matches to prioritize better results
+      // Higher score = better match
+      const scoredMatches = commonItemsCache
+        .map(ci => {
+          const name = ci.name.toLowerCase();
+          const displayName = ci.display_name.toLowerCase();
+          const itemWords = name.split(/\s+/);
+          
+          let score = 0;
+          
+          // Exact match gets highest score
+          if (name === normalized || displayName === normalized) {
+            score = 1000;
+          }
+          // Plural/singular variation of a single word (e.g., "cranberry" → "cranberries")
+          // Only if both are single words and one starts with the other
+          else if (normalizedWords.length === 1 && itemWords.length === 1) {
+            if (name.startsWith(normalized) || normalized.startsWith(name)) {
+              score = 900 - Math.abs(name.length - normalized.length);
+            }
+          }
+          // Multi-word search matching multi-word item (e.g., "orange juice" → "orange juice")
+          else if (normalizedWords.length > 1 && name.startsWith(normalized)) {
+            score = 800 - name.length;
+          }
+          // Single word search but item has multiple words - lower priority
+          // (e.g., "cranberry" should NOT strongly match "cranberry juice")
+          else if (normalizedWords.length === 1 && itemWords.length > 1) {
+            // Only give points if the first word matches exactly or is a plural
+            if (itemWords[0] === normalized || 
+                itemWords[0].startsWith(normalized) && itemWords[0].length - normalized.length <= 3) {
+              score = 200 - name.length; // Much lower score for compound items
+            }
+          }
+          // Search term starts with item name
+          else if (normalized.startsWith(name)) {
+            score = 400 - name.length;
+          }
+          // Contains search term (fallback)
+          else if (name.includes(normalized) || displayName.includes(normalized)) {
+            score = 100 - name.length;
+          }
+          
+          return { ...ci, _score: score };
+        })
+        .filter(ci => ci._score > 0)
+        .sort((a, b) => b._score - a._score)
+        .slice(0, 5)
         .map(ci => ({
           ...ci,
           // Show "Organic [Item]" if user typed organic and it's not already in the name
@@ -94,11 +140,10 @@ export default function FastAddItemInput({ listId, onItemAdded }) {
             ? `Organic ${ci.display_name}`
             : ci.display_name,
           _isOrganic: isOrganic
-        }))
-        .slice(0, 5);
+        }));
       
-      setSuggestions(matches);
-      setShowSuggestions(matches.length > 0);
+      setSuggestions(scoredMatches);
+      setShowSuggestions(scoredMatches.length > 0);
     } else {
       setSuggestions([]);
       setShowSuggestions(false);
@@ -172,7 +217,40 @@ export default function FastAddItemInput({ listId, onItemAdded }) {
         setCurrentStatus('Using selected item data...');
       } else {
         setCurrentStatus('Checking item database...');
-        commonItemFound = commonItemsCache.find(ci => ci.name === normalizedNameForLookup);
+        
+        const searchWords = normalizedNameForLookup.split(/\s+/);
+        const isSingleWordSearch = searchWords.length === 1;
+        
+        // Smart matching: strict matching to avoid false positives
+        // 1. Try exact match
+        commonItemFound = commonItemsCache.find(ci => 
+          ci.name === normalizedNameForLookup || 
+          ci.display_name.toLowerCase() === normalizedNameForLookup
+        );
+        
+        // 2. Try plural/singular match (only for single-word items)
+        // "cranberry" should match "cranberries" but NOT "cranberry juice"
+        if (!commonItemFound && isSingleWordSearch) {
+          const singleWordMatches = commonItemsCache
+            .filter(ci => {
+              const itemWords = ci.name.split(/\s+/);
+              // Only match single-word items
+              if (itemWords.length !== 1) return false;
+              // Check if one starts with the other (plural/singular variation)
+              return ci.name.startsWith(normalizedNameForLookup) || 
+                     normalizedNameForLookup.startsWith(ci.name);
+            })
+            .sort((a, b) => a.name.length - b.name.length);
+          commonItemFound = singleWordMatches[0] || null;
+        }
+        
+        // 3. For multi-word searches, match if item starts with the search term
+        if (!commonItemFound && !isSingleWordSearch) {
+          commonItemFound = commonItemsCache.find(ci => 
+            ci.name.startsWith(normalizedNameForLookup)
+          );
+        }
+        
         if (commonItemFound) {
           setCurrentStatus('Using existing item data...');
         }
@@ -182,17 +260,11 @@ export default function FastAddItemInput({ listId, onItemAdded }) {
         detectedCategory = commonItemFound.category;
         photoUrl = commonItemFound.photo_url || '';
         
-        // Update usage count in database for the base item (without "organic" prefix)
-        CommonItem.filter({}).then(dbItems => {
-          // Look for the base item name (e.g., "orange" not "organic orange")
-          const baseItemName = normalizedNameForLookup;
-          const dbMatch = dbItems.find(ci => ci.name === baseItemName);
-          if (dbMatch) {
-            CommonItem.update(dbMatch.id, {
-              usage_count: (dbMatch.usage_count || 0) + 1
-            });
-          }
-        }).catch(err => console.warn("Could not update usage count for common item:", err));
+        // Increment usage count via secure RPC function (fire-and-forget)
+        if (commonItemFound.id) {
+          supabase.rpc('increment_common_item_usage', { item_id: commonItemFound.id })
+            .catch(err => console.warn("Could not update usage count:", err));
+        }
       } else {
         const creditResult = await consumeCredits(
           'fast_add_ai',

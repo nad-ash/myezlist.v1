@@ -14,6 +14,7 @@ import ItemCard from "../components/items/ItemCard";
 import AddItemDialog from "../components/items/AddItemDialog";
 import FastAddItemInput from "../components/items/FastAddItemInput";
 import ShareDialog from "../components/lists/ShareDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { canAddItem } from "@/components/utils/tierManager";
 import UpgradePrompt from "@/components/common/UpgradePrompt";
 import { incrementUsage, decrementUsage } from "@/components/utils/usageSync";
@@ -33,6 +34,10 @@ export default function ListViewPage() {
   const [upgradeMessage, setUpgradeMessage] = useState("");
   const [upgradeTitle, setUpgradeTitle] = useState("Limit Reached");
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Confirm dialog states
+  const [deleteItemConfirm, setDeleteItemConfirm] = useState({ open: false, item: null });
+  const [deleteListConfirm, setDeleteListConfirm] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
   const listId = urlParams.get("listId");
@@ -289,29 +294,34 @@ export default function ListViewPage() {
     }
   };
 
-  const handleDeleteItem = async (item) => {
-    if (confirm("Delete this item?")) {
-      try {
-        // Remove from UI immediately
-        setItems(prev => prev.filter(i => i.id !== item.id));
+  const handleDeleteItem = (item) => {
+    setDeleteItemConfirm({ open: true, item });
+  };
 
-        // Make API call in background with tracking
-        await Item.delete(item.id, trackItem.delete(user.id, item.name));
-        
-        // Decrement total items count
-        await decrementUsage('current_total_items');
-        
-        // Update statistics - atomic decrement total_items
-        await updateStatCount('total_items', -1);
+  const confirmDeleteItem = async () => {
+    const item = deleteItemConfirm.item;
+    if (!item) return;
+    
+    try {
+      // Remove from UI immediately
+      setItems(prev => prev.filter(i => i.id !== item.id));
 
-        // Invalidate this specific list's cache since item count changed
-        console.log(`🗑️ ListView: Clearing cache for list ${listId} (item deleted)`);
-        appCache.clearShoppingList(listId);
-      } catch (error) {
-        console.error("Error deleting item:", error);
-        // Reload on error
-        loadData();
-      }
+      // Make API call in background with tracking
+      await Item.delete(item.id, trackItem.delete(user.id, item.name));
+      
+      // Decrement total items count
+      await decrementUsage('current_total_items');
+      
+      // Update statistics - atomic decrement total_items
+      await updateStatCount('total_items', -1);
+
+      // Invalidate this specific list's cache since item count changed
+      console.log(`🗑️ ListView: Clearing cache for list ${listId} (item deleted)`);
+      appCache.clearShoppingList(listId);
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      // Reload on error
+      loadData();
     }
   };
 
@@ -339,11 +349,11 @@ export default function ListViewPage() {
     setEditingItem(null);
   };
 
-  const handleDeleteList = async () => {
-    if (!confirm(`Are you sure you want to delete "${list.name}"? This will also delete all items in the list.`)) {
-      return;
-    }
+  const handleDeleteList = () => {
+    setDeleteListConfirm(true);
+  };
 
+  const confirmDeleteList = async () => {
     try {
       // Check if user is the owner
       const memberships = await ListMember.filter({
@@ -793,6 +803,30 @@ export default function ListViewPage() {
         title={upgradeTitle}
         message={upgradeMessage}
         featureName="Additional Items"
+      />
+
+      {/* Delete Item Confirmation */}
+      <ConfirmDialog
+        open={deleteItemConfirm.open}
+        onOpenChange={(open) => setDeleteItemConfirm({ open, item: open ? deleteItemConfirm.item : null })}
+        title="Delete Item"
+        description={`Are you sure you want to delete "${deleteItemConfirm.item?.name}"?`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteItem}
+        destructive
+      />
+
+      {/* Delete List Confirmation */}
+      <ConfirmDialog
+        open={deleteListConfirm}
+        onOpenChange={setDeleteListConfirm}
+        title="Delete List"
+        description={`Are you sure you want to delete "${list?.name}"? This will also delete all items in the list.`}
+        confirmText="Delete List"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteList}
+        destructive
       />
     </div>
   );
