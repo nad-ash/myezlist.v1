@@ -122,6 +122,8 @@ export default function VoiceCommandInput({ userLists, onItemAdded }) {
         // Search for the item in common_items with smart matching
         const allCommonItems = await CommonItem.list();
         const normalizedItemName = capitalizedName.toLowerCase().trim();
+        const searchWords = normalizedItemName.split(/\s+/);
+        const isSingleWordSearch = searchWords.length === 1;
         
         // 1. Try exact match first
         let matchedCommonItem = allCommonItems.find(
@@ -129,34 +131,27 @@ export default function VoiceCommandInput({ userLists, onItemAdded }) {
                 ci.display_name?.toLowerCase().trim() === normalizedItemName
         );
         
-        // 2. Try "starts with" match - prefer shorter names (closer matches)
-        if (!matchedCommonItem) {
-          const startsWithMatches = allCommonItems
-            .filter(ci => 
-              ci.name?.toLowerCase().startsWith(normalizedItemName) ||
-              ci.display_name?.toLowerCase().startsWith(normalizedItemName)
-            )
+        // 2. Try plural/singular match (only for single-word searches)
+        // "cranberry" should match "cranberries" but NOT "cranberry juice"
+        if (!matchedCommonItem && isSingleWordSearch) {
+          const singleWordMatches = allCommonItems
+            .filter(ci => {
+              const itemWords = (ci.name || '').split(/\s+/);
+              // Only match single-word items to avoid false positives
+              if (itemWords.length !== 1) return false;
+              const itemName = ci.name?.toLowerCase() || '';
+              return itemName.startsWith(normalizedItemName) || 
+                     normalizedItemName.startsWith(itemName);
+            })
             .sort((a, b) => (a.name?.length || 0) - (b.name?.length || 0));
-          matchedCommonItem = startsWithMatches[0] || null;
+          matchedCommonItem = singleWordMatches[0] || null;
         }
         
-        // 3. Try reverse "starts with" (e.g., "oranges" typed matches "orange" in db)
-        if (!matchedCommonItem) {
+        // 3. For multi-word searches, match if item starts with the search term
+        if (!matchedCommonItem && !isSingleWordSearch) {
           matchedCommonItem = allCommonItems.find(
-            ci => normalizedItemName.startsWith(ci.name?.toLowerCase()) ||
-                  normalizedItemName.startsWith(ci.display_name?.toLowerCase())
+            ci => ci.name?.toLowerCase().startsWith(normalizedItemName)
           );
-        }
-        
-        // 4. Fall back to contains match - prefer shorter names
-        if (!matchedCommonItem) {
-          const containsMatches = allCommonItems
-            .filter(ci => 
-              ci.name?.toLowerCase().includes(normalizedItemName) ||
-              ci.display_name?.toLowerCase().includes(normalizedItemName)
-            )
-            .sort((a, b) => (a.name?.length || 0) - (b.name?.length || 0));
-          matchedCommonItem = containsMatches[0] || null;
         }
 
         if (matchedCommonItem) {

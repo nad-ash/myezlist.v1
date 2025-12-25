@@ -14,6 +14,7 @@ import { trackTodo } from "@/utils/trackingContext";
 import AddTodoDialog from "../components/todos/AddTodoDialog";
 import TodoCard from "../components/todos/TodoCard";
 import VoiceCommandInput from "../components/todos/VoiceCommandInput";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { canCreateTask } from "@/components/utils/tierManager";
 import UpgradePrompt from "@/components/common/UpgradePrompt";
 import { incrementUsage, decrementUsage } from "@/components/utils/usageSync";
@@ -51,6 +52,7 @@ export default function TodosPage() {
   const [expandedTasks, setExpandedTasks] = useState({});
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [upgradeMessage, setUpgradeMessage] = useState("");
+  const [deleteTodoConfirm, setDeleteTodoConfirm] = useState({ open: false, todo: null });
   const [user, setUser] = useState(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isColorfulTheme, setIsColorfulTheme] = useState(false);
@@ -215,12 +217,17 @@ export default function TodosPage() {
   };
 
   const handleDelete = (todo) => {
-    if (confirm(`Delete "${todo.title}"?`)) {
-      deleteTodoMutation.mutate({ 
-        id: todo.id,
-        trackingContext: trackTodo.delete(user.id)
-      });
-    }
+    setDeleteTodoConfirm({ open: true, todo });
+  };
+
+  const confirmDeleteTodo = () => {
+    const todo = deleteTodoConfirm.todo;
+    if (!todo) return;
+    
+    deleteTodoMutation.mutate({ 
+      id: todo.id,
+      trackingContext: trackTodo.delete(user.id)
+    });
   };
 
   const toggleCategory = (category) => {
@@ -513,6 +520,18 @@ export default function TodosPage() {
         title="Task Limit Reached"
         message={upgradeMessage}
         featureName="Additional Tasks"
+      />
+
+      {/* Delete Task Confirmation */}
+      <ConfirmDialog
+        open={deleteTodoConfirm.open}
+        onOpenChange={(open) => setDeleteTodoConfirm({ open, todo: open ? deleteTodoConfirm.todo : null })}
+        title="Delete Task"
+        description={`Are you sure you want to delete "${deleteTodoConfirm.todo?.title}"?`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteTodo}
+        destructive
       />
     </div>
   );

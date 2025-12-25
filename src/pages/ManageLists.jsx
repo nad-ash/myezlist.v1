@@ -11,6 +11,7 @@ import { trackShoppingList } from "@/utils/trackingContext";
 import ListCard from "../components/lists/ListCard";
 import AddListDialog from "../components/lists/AddListDialog";
 import VoiceCommandInput from "../components/home/VoiceCommandInput";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { canCreateShoppingList, canAddItem } from "@/components/utils/tierManager";
 import UpgradePrompt from "@/components/common/UpgradePrompt";
 import { incrementUsage, decrementUsage } from "@/components/utils/usageSync";
@@ -27,6 +28,7 @@ export default function ManageListsPage() {
   const [itemCounts, setItemCounts] = useState({});
   const [creatingList, setCreatingList] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [deleteListConfirm, setDeleteListConfirm] = useState({ open: false, list: null });
 
   useEffect(() => {
     // Check for hard refresh to ensure fresh data
@@ -195,10 +197,13 @@ export default function ManageListsPage() {
     setCreatingList(false);
   };
 
-  const handleDeleteList = async (list) => {
-    if (!confirm(`Delete "${list.name}" and all its items?`)) {
-      return;
-    }
+  const handleDeleteList = (list) => {
+    setDeleteListConfirm({ open: true, list });
+  };
+
+  const confirmDeleteList = async () => {
+    const list = deleteListConfirm.list;
+    if (!list) return;
 
     try {
       // Optimistically update UI immediately
@@ -367,6 +372,18 @@ export default function ManageListsPage() {
         title={upgradeTitle}
         message={upgradeMessage}
         featureName={upgradeTitle === "List Limit Reached" ? "Additional Shopping Lists" : "Additional Items"}
+      />
+
+      {/* Delete List Confirmation */}
+      <ConfirmDialog
+        open={deleteListConfirm.open}
+        onOpenChange={(open) => setDeleteListConfirm({ open, list: open ? deleteListConfirm.list : null })}
+        title="Delete List"
+        description={`Delete "${deleteListConfirm.list?.name}" and all its items? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteList}
+        destructive
       />
     </div>
   );
