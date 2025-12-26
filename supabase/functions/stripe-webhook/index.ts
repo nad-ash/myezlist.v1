@@ -10,12 +10,33 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") as string, {
 const endpointSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET") as string;
 
 // Map Stripe price IDs to subscription tiers
-const PRICE_TO_TIER: Record<string, string> = {
-  // Add your Stripe price IDs here
-  "price_1SPeiTFMuPSjYr4KyTxOKEP8": "adfree",
-  "price_1SPemvFMuPSjYr4KOW0L2OCr": "pro",
-  "price_1SPesAFMuPSjYr4KIdi5yR3o": "premium"
-};
+// Uses environment variables to support different IDs for test vs live mode
+const PRICE_TO_TIER: Record<string, string> = {};
+
+// Load price IDs from environment variables
+const priceAdfree = Deno.env.get("STRIPE_PRICE_ADFREE");
+const pricePro = Deno.env.get("STRIPE_PRICE_PRO");
+const pricePremium = Deno.env.get("STRIPE_PRICE_PREMIUM");
+
+if (priceAdfree) PRICE_TO_TIER[priceAdfree] = "adfree";
+if (pricePro) PRICE_TO_TIER[pricePro] = "pro";
+if (pricePremium) PRICE_TO_TIER[pricePremium] = "premium";
+
+// Log the mapping and warn about missing configurations
+console.log("Loaded PRICE_TO_TIER mapping:", PRICE_TO_TIER);
+
+const missingPriceVars: string[] = [];
+if (!priceAdfree) missingPriceVars.push("STRIPE_PRICE_ADFREE");
+if (!pricePro) missingPriceVars.push("STRIPE_PRICE_PRO");
+if (!pricePremium) missingPriceVars.push("STRIPE_PRICE_PREMIUM");
+
+if (missingPriceVars.length > 0) {
+  console.error(`⚠️ CRITICAL: Missing Stripe price environment variables: ${missingPriceVars.join(", ")}. Subscriptions with unconfigured prices will FAIL to process correctly.`);
+}
+
+if (Object.keys(PRICE_TO_TIER).length === 0) {
+  console.error("🚨 CRITICAL: PRICE_TO_TIER is EMPTY! No price IDs are configured. ALL subscription webhooks will fail!");
+}
 
 // Tier configurations
 const TIER_CONFIG: Record<string, { monthly_credits: number }> = {
@@ -121,11 +142,19 @@ serve(async (req) => {
         
         const tier = PRICE_TO_TIER[priceId];
         if (!tier) {
-          console.error(`Unknown price ID: ${priceId}. Known prices:`, Object.keys(PRICE_TO_TIER));
-          // Still continue with a default, but log it
+          console.error(`🚨 CRITICAL: Unknown price ID: ${priceId}. Known prices: [${Object.keys(PRICE_TO_TIER).join(", ")}]`);
+          console.error(`Cannot process subscription - price ID not mapped to a tier. Configure STRIPE_PRICE_* environment variables.`);
+          // Return 500 to tell Stripe to retry - this gives operators time to fix the configuration
+          return new Response(
+            JSON.stringify({ 
+              error: "Price ID not configured", 
+              priceId,
+              knownPrices: Object.keys(PRICE_TO_TIER) 
+            }), 
+            { status: 500, headers: { "Content-Type": "application/json" } }
+          );
         }
-        const finalTier = tier || "pro";
-        console.log(`Tier resolved to: ${finalTier}`);
+        console.log(`Tier resolved to: ${tier}`);
 
         // Try to find user ID from session metadata, subscription metadata, or customer lookup
         let userId = session.metadata?.supabase_user_id || subscription.metadata?.supabase_user_id;
@@ -142,18 +171,18 @@ serve(async (req) => {
           break;
         }
 
-        console.log(`Updating user ${userId} to tier ${finalTier}`);
+        console.log(`Updating user ${userId} to tier ${tier}`);
 
         // Update user profile
         const { data: updateData, error: updateError } = await supabaseClient
           .from("profiles")
           .update({
-            subscription_tier: finalTier,
+            subscription_tier: tier,
             stripe_customer_id: customerId, // Ensure customer ID is stored
             stripe_subscription_id: subscriptionId,
             stripe_subscription_status: subscription.status,
             subscription_start_date: new Date().toISOString(),
-            monthly_credits_total: TIER_CONFIG[finalTier]?.monthly_credits || 100,
+            monthly_credits_total: TIER_CONFIG[tier]?.monthly_credits || 100,
             credits_used_this_month: 0,
             credits_reset_date: new Date().toISOString(),
             last_payment_date: new Date().toISOString(),
@@ -164,7 +193,7 @@ serve(async (req) => {
         if (updateError) {
           console.error(`FAILED to update user ${userId}:`, updateError);
         } else {
-          console.log(`SUCCESS: User ${userId} upgraded to ${finalTier}`);
+          console.log(`SUCCESS: User ${userId} upgraded to ${tier}`);
           console.log(`Update result:`, JSON.stringify(updateData));
         }
         break;
@@ -192,8 +221,22 @@ serve(async (req) => {
         }
 
         const priceId = subscription.items.data[0]?.price.id;
-        const tier = PRICE_TO_TIER[priceId] || "pro";
-        console.log(`Price ID: ${priceId}, Tier: ${tier}`);
+        const tier = PRICE_TO_TIER[priceId];
+        
+        if (!tier && subscription.status !== "canceled") {
+          console.error(`🚨 CRITICAL: Unknown price ID in subscription update: ${priceId}. Known prices: [${Object.keys(PRICE_TO_TIER).join(", ")}]`);
+          console.error(`Cannot process subscription update - price ID not mapped to a tier. Configure STRIPE_PRICE_* environment variables.`);
+          // Return 500 to tell Stripe to retry - this gives operators time to fix the configuration
+          return new Response(
+            JSON.stringify({ 
+              error: "Price ID not configured", 
+              priceId,
+              knownPrices: Object.keys(PRICE_TO_TIER) 
+            }), 
+            { status: 500, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        console.log(`Price ID: ${priceId}, Tier: ${tier || "(canceled)"}`);
 
         // Check if subscription is being canceled
         const isCanceled = subscription.status === "canceled";
@@ -233,20 +276,22 @@ serve(async (req) => {
           console.log(`updateData:`, JSON.stringify(updateData));
         } else if (isCanceledAtPeriodEnd === false && subscription.status === "active") {
           // User might have reactivated - clear cancel info
+          // tier is guaranteed to be defined here because we return 500 for unknown prices when not canceled
           console.log(`Subscription reactivated for user ${userId}`);
           updateData = {
-            subscription_tier: tier,
+            subscription_tier: tier!,
             stripe_subscription_status: subscription.status,
             subscription_cancel_reason: null,
             subscription_end_date: null,
-            monthly_credits_total: TIER_CONFIG[tier]?.monthly_credits || 100,
+            monthly_credits_total: TIER_CONFIG[tier!]?.monthly_credits || 100,
           };
         } else {
           // Normal update (e.g., plan change)
+          // tier is guaranteed to be defined here because we return 500 for unknown prices when not canceled
           updateData = {
-            subscription_tier: tier,
+            subscription_tier: tier!,
             stripe_subscription_status: subscription.status,
-            monthly_credits_total: TIER_CONFIG[tier]?.monthly_credits || 100,
+            monthly_credits_total: TIER_CONFIG[tier!]?.monthly_credits || 100,
           };
         }
 

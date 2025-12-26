@@ -160,14 +160,14 @@ export default function SettingsPage() {
     
     setUpgrading(true);
     try {
-      const { data } = await createCheckoutSession({ tier: tierName });
+      // createCheckoutSession handles the redirect internally if data.url is truthy
+      const data = await createCheckoutSession({ tier: tierName });
       
-      if (data.url) {
-        // Redirect to Stripe Checkout
-        window.location.href = data.url;
-      } else {
+      // If we're still here (no redirect happened), something went wrong
+      if (!data?.url) {
         throw new Error('No checkout URL returned');
       }
+      // If data.url exists, the redirect was already triggered by createCheckoutSession
     } catch (error) {
       console.error("Error creating checkout session:", error);
       alert("Failed to start checkout. Please try again.");
@@ -180,19 +180,18 @@ export default function SettingsPage() {
     
     setManagingSubscription(true);
     try {
-      // createCustomerPortal already handles the redirect internally
-      // It returns { url: "..." } and redirects to that URL
+      // createCustomerPortal handles the redirect internally if response.url is truthy
       const response = await createCustomerPortal();
       console.log('Portal response:', response);
       
-      // The redirect happens inside createCustomerPortal, but just in case:
-      if (response && response.url) {
-        window.location.href = response.url;
-      } else if (response && response.data && response.data.url) {
-        // Fallback for wrapped response
-        window.location.href = response.data.url;
+      // Extract URL from response (handles both direct and wrapped responses)
+      const portalUrl = response?.url || response?.data?.url;
+      
+      // If we're still here (no redirect happened), something went wrong
+      if (!portalUrl) {
+        throw new Error('No portal URL returned');
       }
-      // If we get here without redirect, the function already handled it
+      // If portalUrl exists, the redirect was already triggered by createCustomerPortal
     } catch (error) {
       console.error("Error opening customer portal:", error);
       alert("Failed to open subscription management. Please try again.");
