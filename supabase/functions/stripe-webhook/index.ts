@@ -10,12 +10,19 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") as string, {
 const endpointSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET") as string;
 
 // Map Stripe price IDs to subscription tiers
-const PRICE_TO_TIER: Record<string, string> = {
-  // Add your Stripe price IDs here
-  "price_1SPeiTFMuPSjYr4KyTxOKEP8": "adfree",
-  "price_1SPemvFMuPSjYr4KOW0L2OCr": "pro",
-  "price_1SPesAFMuPSjYr4KIdi5yR3o": "premium"
-};
+// Uses environment variables to support different IDs for test vs live mode
+const PRICE_TO_TIER: Record<string, string> = {};
+
+// Load price IDs from environment variables
+const priceAdfree = Deno.env.get("STRIPE_PRICE_ADFREE");
+const pricePro = Deno.env.get("STRIPE_PRICE_PRO");
+const pricePremium = Deno.env.get("STRIPE_PRICE_PREMIUM");
+
+if (priceAdfree) PRICE_TO_TIER[priceAdfree] = "adfree";
+if (pricePro) PRICE_TO_TIER[pricePro] = "pro";
+if (pricePremium) PRICE_TO_TIER[pricePremium] = "premium";
+
+console.log("Loaded PRICE_TO_TIER mapping:", PRICE_TO_TIER);
 
 // Tier configurations
 const TIER_CONFIG: Record<string, { monthly_credits: number }> = {
