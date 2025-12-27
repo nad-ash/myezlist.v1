@@ -107,11 +107,14 @@ export async function canCreateShoppingList() {
 
 /**
  * Check if user can add a new item to a shopping list
+ * @param {boolean} useCache - If true, use cached data for fast response (default: false for accuracy)
  */
-export async function canAddItem() {
+export async function canAddItem(useCache = false) {
   try {
-    // Force fresh user data by clearing cache first
-    appCache.clearUser();
+    // Only force fresh user data if not using cache
+    if (!useCache) {
+      appCache.clearUser();
+    }
     
     const { limits, user } = await getUserTierInfo();
     

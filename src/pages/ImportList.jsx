@@ -599,11 +599,15 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
         
         console.log(`🔎 Looking up: "${item.name}" → AI category: ${aiCategory || 'none'}, Master category: ${item.masterItemCategory || 'none'} → Final: ${category}`);
 
-        // Use master item photo by default, or generate with AI if enabled
+        // Use master item photo by default
         let photoUrl = item.masterItemPhotoUrl || '';
         
-        // Generate image if option is selected (overrides master item photo)
-        if (withAIImages) {
+        // Generate AI image ONLY if:
+        // 1. AI Images option is enabled, AND
+        // 2. Item doesn't already have a photo from master list
+        const needsAIImage = withAIImages && !item.masterItemPhotoUrl;
+        
+        if (needsAIImage) {
           try {
             setCurrentStatus(`Generating image for "${item.name}" (may take 10-15 seconds)...`);
             const imagePrompt = `A clean, professional product photo of ${item.name} on a white background, centered, well-lit, high quality product photography`;
@@ -615,8 +619,8 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
             // Consume 1 credit for image generation
             await consumeCredits(
               'bulk_import_image',
-              `AI image generation for "${item.name}"`, // Changed: description as second argument
-              { // Changed: details as third argument
+              `AI image generation for "${item.name}"`,
+              {
                 item_name: item.name,
                 list_id: targetListId
               }
@@ -624,6 +628,8 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
           } catch (imgError) {
             console.warn(`Image generation failed for "${item.name}", continuing without image:`, imgError);
           }
+        } else if (item.masterItemPhotoUrl) {
+          console.log(`✅ Using master list photo for "${item.name}": ${item.masterItemPhotoUrl.substring(0, 50)}...`);
         }
 
         // Create the item with organic flag
@@ -690,7 +696,8 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
   );
 
   // Calculate total credits for display
-  const totalCreditsForImport = 2 + (withAIImages ? organizedItems.length : 0);
+  // Note: This is a maximum estimate - items matching master list with photos won't need AI image generation
+  const totalCreditsForImport = (withAutoCategorization ? 2 : 0) + (withAIImages ? organizedItems.length : 0);
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -871,18 +878,18 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
                 />
                 <div className="flex-1">
                   <label htmlFor="with-ai-images" className="text-sm font-medium text-slate-800 dark:text-slate-100 cursor-pointer block mb-1">
-                    Generate AI Images for Items
+                    Generate AI Images for New Items
                   </label>
                   <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Each item will get a professional AI-generated image. Adds 1 credit per item. 
+                    Items matching our master list will use existing photos (free). AI images will only be generated for items not in our database. 
                     {withAIImages && (
                       <span className="block mt-2 text-amber-700 dark:text-amber-400 font-medium">
-                        🖼️ Enabled - AI images will be generated
+                        🖼️ Enabled - AI images for items without master list photos
                       </span>
                     )}
                     {!withAIImages && (
                       <span className="block mt-2 text-slate-600 dark:text-slate-400 font-medium">
-                        ⚪ Disabled - No images will be generated
+                        ⚪ Disabled - Only master list photos will be used
                       </span>
                     )}
                   </p>
@@ -892,12 +899,15 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
               {/* Credit Summary */}
               <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                 <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
-                  💰 Total Credits Required: {totalCreditsForImport}
+                  💰 Maximum Credits: {totalCreditsForImport}
                 </p>
                 <p className="text-xs text-blue-800 dark:text-blue-200">
-                  {withAutoCategorization ? '2 credits for categorization' : '0 credits (categorization disabled)'}
+                  {withAutoCategorization ? '2 credits for categorization (items not in master list)' : '0 credits (categorization disabled)'}
                   {withAutoCategorization && withAIImages && ' + '}
-                  {withAIImages && `${organizedItems.length} credits for images`}
+                  {withAIImages && `up to ${organizedItems.length} credits for images (only for items without master list photos)`}
+                </p>
+                <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                  ✨ Items matching our master list use existing photos for free!
                 </p>
               </div>
             </div>
@@ -977,7 +987,7 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
             className="w-full h-14 text-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-lg"
           >
             <CheckCircle className="w-5 h-5 mr-2" />
-            Import {organizedItems.length} Items ({totalCreditsForImport} credits)
+            Import {organizedItems.length} Items (up to {totalCreditsForImport} credits)
           </Button>
         </>
       )}

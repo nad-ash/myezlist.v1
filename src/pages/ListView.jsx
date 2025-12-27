@@ -11,6 +11,24 @@ import { appCache } from "@/components/utils/appCache";
 import { trackItem, trackShoppingList, trackShare, PAGES, OPERATIONS } from "@/utils/trackingContext";
 
 import ItemCard from "../components/items/ItemCard";
+
+// Predefined category order for consistent display
+const CATEGORY_ORDER = [
+  "Produce",
+  "Pantry",
+  "Dairy",
+  "Meat & Seafood",
+  "Frozen",
+  "Beverages",
+  "Snacks",
+  "Household",
+  "Bakery",
+  "Personal Care",
+  "Cleaning",
+  "Baby",
+  "Pet",
+  "Other"
+];
 import AddItemDialog from "../components/items/AddItemDialog";
 import FastAddItemInput from "../components/items/FastAddItemInput";
 import ShareDialog from "../components/lists/ShareDialog";
@@ -455,7 +473,18 @@ export default function ListViewPage() {
     });
   const favoriteItems = activeItems.filter(item => item.is_favorite);
 
-  const categories = ["all", ...new Set(activeItems.map(item => item.category).filter(Boolean))];
+  // Get unique categories from active items, sorted by predefined order
+  const categoriesInActiveItems = [...new Set(activeItems.map(item => item.category).filter(Boolean))]
+    .sort((a, b) => {
+      const indexA = CATEGORY_ORDER.indexOf(a);
+      const indexB = CATEGORY_ORDER.indexOf(b);
+      // Put unknown categories at the end, sorted alphabetically
+      if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
+  const categories = ["all", ...categoriesInActiveItems];
 
   const filteredActiveItems = selectedCategory === "all"
     ? activeItems
@@ -471,8 +500,16 @@ export default function ListViewPage() {
     return groups;
   }, {});
 
-  // Sort categories alphabetically
-  const sortedCategories = Object.keys(groupedItems).sort();
+  // Sort categories by predefined order for consistent display
+  const sortedCategories = Object.keys(groupedItems).sort((a, b) => {
+    const indexA = CATEGORY_ORDER.indexOf(a);
+    const indexB = CATEGORY_ORDER.indexOf(b);
+    // Put unknown categories at the end, sorted alphabetically
+    if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
 
   // Check if current user is owner
   const isOwner = list?.owner_id === user?.id;
@@ -662,7 +699,7 @@ export default function ListViewPage() {
       </div>
 
       {/* Fast Add Input */}
-      <FastAddItemInput listId={listId} onItemAdded={loadData} />
+      <FastAddItemInput listId={listId} existingItems={items} onItemAdded={loadData} />
 
       {/* Add Item Button */}
       <Button

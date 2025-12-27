@@ -1,7 +1,7 @@
 /**
  * Supabase Entity Implementations
  * 
- * This file provides entity classes that match the Base44 entity interface.
+ * This file provides entity classes for database operations.
  * Each entity supports: list(), filter(), create(), update(), delete()
  */
 
