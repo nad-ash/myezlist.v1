@@ -9,8 +9,8 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'YOUR_SUPABA
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /**
- * Auth wrapper that provides the same interface as base44.auth
- * This makes migration easier by keeping the same method signatures
+ * Auth wrapper that provides a consistent interface for authentication
+ * Methods: me(), logout(), redirectToLogin(), updateMe(), signInWithPassword(), etc.
  */
 export const supabaseAuth = {
   /**
@@ -217,7 +217,7 @@ export const supabaseAuth = {
 
 /**
  * User entity wrapper for admin operations
- * Provides filter/search functionality similar to base44.entities.User
+ * Provides filter/search functionality for user management
  */
 export const UserEntity = {
   /**

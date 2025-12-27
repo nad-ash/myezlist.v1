@@ -1,7 +1,8 @@
 /**
- * Image Migration Script
+ * Image Migration Script (Legacy - One-time use)
  * 
- * Migrates images from Base44 Supabase storage to your own Supabase storage bucket.
+ * This script was used to migrate images from the old storage to the new Supabase bucket.
+ * It scans database tables for old image URLs and re-uploads them to the new bucket.
  * 
  * Prerequisites:
  * 1. Create a storage bucket called 'images' in your Supabase project
@@ -24,8 +25,8 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'YOUR_SERV
 // Storage bucket name (create this in Supabase Dashboard → Storage)
 const STORAGE_BUCKET = 'images';
 
-// Base44 URL pattern to detect and migrate
-const BASE44_PATTERN = 'qtrypzzcjebvfcihiynt.supabase.co';
+// Old storage URL pattern to detect and migrate
+const OLD_STORAGE_PATTERN = 'qtrypzzcjebvfcihiynt.supabase.co';
 
 // ============================================
 // SCRIPT - Don't modify below this line
@@ -108,12 +109,12 @@ async function migrateTable(tableName, idColumn = 'id') {
   console.log(`📦 Migrating table: ${tableName}`);
   console.log('='.repeat(50));
 
-  // Get all records with Base44 URLs
+  // Get all records with old storage URLs
   const { data: records, error } = await supabase
     .from(tableName)
     .select(`${idColumn}, photo_url`)
     .not('photo_url', 'is', null)
-    .like('photo_url', `%${BASE44_PATTERN}%`);
+    .like('photo_url', `%${OLD_STORAGE_PATTERN}%`);
 
   if (error) {
     console.error(`❌ Error fetching ${tableName}:`, error.message);
@@ -121,11 +122,11 @@ async function migrateTable(tableName, idColumn = 'id') {
   }
 
   if (!records || records.length === 0) {
-    console.log(`✓ No Base44 images found in ${tableName}`);
+    console.log(`✓ No old storage images found in ${tableName}`);
     return;
   }
 
-  console.log(`Found ${records.length} records with Base44 URLs\n`);
+  console.log(`Found ${records.length} records with old storage URLs\n`);
   stats.total += records.length;
 
   for (let i = 0; i < records.length; i++) {
@@ -139,7 +140,7 @@ async function migrateTable(tableName, idColumn = 'id') {
 
       process.stdout.write(`${progress} ${record[idColumn]}: Downloading... `);
 
-      // Download from Base44
+      // Download from old storage
       const imageBuffer = await downloadImage(oldUrl);
       
       process.stdout.write(`Uploading... `);
@@ -178,11 +179,11 @@ async function migrateTable(tableName, idColumn = 'id') {
 async function main() {
   console.log('\n');
   console.log('╔══════════════════════════════════════════════════════════╗');
-  console.log('║     🚀 Base44 to Supabase Image Migration Script         ║');
+  console.log('║     🚀 Image Migration Script                             ║');
   console.log('╚══════════════════════════════════════════════════════════╝');
   console.log(`\nTarget: ${SUPABASE_URL}`);
   console.log(`Bucket: ${STORAGE_BUCKET}`);
-  console.log(`Pattern: ${BASE44_PATTERN}`);
+  console.log(`Pattern: ${OLD_STORAGE_PATTERN}`);
 
   // Validate configuration
   if (SUPABASE_SERVICE_KEY === 'YOUR_SERVICE_ROLE_KEY_HERE') {
@@ -233,13 +234,12 @@ async function main() {
 
   if (stats.failed > 0) {
     console.log('⚠️  Some images failed to migrate. You may need to:');
-    console.log('   - Check if those images still exist in Base44');
+    console.log('   - Check if those images still exist in old storage');
     console.log('   - Re-run the script to retry failed items\n');
   }
 
   if (stats.migrated > 0) {
-    console.log('✅ Migration complete! Your images are now stored in your Supabase bucket.');
-    console.log('   You can safely shut off your Base44 account after verifying.\n');
+    console.log('✅ Migration complete! Your images are now stored in your Supabase bucket.\n');
   }
 }
 

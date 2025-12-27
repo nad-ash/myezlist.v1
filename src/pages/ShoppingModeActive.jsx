@@ -19,6 +19,24 @@ import { appCache } from "@/components/utils/appCache";
 
 import ItemCard from "../components/items/ItemCard";
 
+// Predefined category order for consistent display
+const CATEGORY_ORDER = [
+  "Produce",
+  "Pantry",
+  "Dairy",
+  "Meat & Seafood",
+  "Frozen",
+  "Beverages",
+  "Snacks",
+  "Household",
+  "Bakery",
+  "Personal Care",
+  "Cleaning",
+  "Baby",
+  "Pet",
+  "Other"
+];
+
 export default function ShoppingModeActivePage() {
   const navigate = useNavigate();
   const [lists, setLists] = useState([]);
@@ -263,7 +281,17 @@ export default function ShoppingModeActivePage() {
   const checkedItems = items.filter(item => item.is_checked);
   const progress = items.length > 0 ? (checkedItems.length / items.length) * 100 : 0;
 
-  const categoriesInActiveItems = [...new Set(activeItems.map(item => item.category).filter(Boolean))];
+  // Get unique categories from active items, sorted by predefined order
+  const categoriesInActiveItems = [...new Set(activeItems.map(item => item.category).filter(Boolean))]
+    .sort((a, b) => {
+      const indexA = CATEGORY_ORDER.indexOf(a);
+      const indexB = CATEGORY_ORDER.indexOf(b);
+      // Put unknown categories at the end
+      if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
   const categories = ["all", ...categoriesInActiveItems];
 
   const filteredActiveItems = selectedCategory === "all" 
@@ -281,9 +309,12 @@ export default function ShoppingModeActivePage() {
     return groups;
   }, {});
 
+  // Sort categories by predefined order for consistent display
   const sortedCategories = Object.keys(groupedItems).sort((a, b) => {
-    const indexA = categories.indexOf(a);
-    const indexB = categories.indexOf(b);
+    const indexA = CATEGORY_ORDER.indexOf(a);
+    const indexB = CATEGORY_ORDER.indexOf(b);
+    // Put unknown categories at the end, sorted alphabetically
+    if (indexA === -1 && indexB === -1) return a.localeCompare(b);
     if (indexA === -1) return 1;
     if (indexB === -1) return -1;
     return indexA - indexB;
@@ -374,14 +405,14 @@ export default function ShoppingModeActivePage() {
               </div>
 
               {categories.length > 1 && (
-                <div className="mb-4 w-full overflow-x-auto scrollbar-hide">
-                  <div className="flex gap-2 pb-2 px-4 min-w-max">
+                <div className="mb-4 px-4">
+                  <div className="flex flex-wrap gap-2">
                     {categories.map((cat) => (
                       <Badge
                         key={cat}
                         variant={selectedCategory === cat ? "default" : "outline"}
                         className={cn(
-                          "cursor-pointer whitespace-nowrap text-base py-2 px-4 flex-shrink-0",
+                          "cursor-pointer whitespace-nowrap text-base py-2 px-4",
                           selectedCategory === cat 
                             ? "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-600 dark:text-white" 
                             : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50 dark:bg-slate-700 dark:text-white dark:border-slate-600 dark:hover:bg-slate-600"
