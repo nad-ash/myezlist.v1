@@ -54,6 +54,7 @@ import { incrementUsage } from "@/components/utils/usageSync";
 import { appCache } from "@/components/utils/appCache";
 import { canCreateCustomRecipe } from "@/components/utils/tierManager";
 import { useRecipeLoadingPhrases } from "@/hooks/useRecipeLoadingPhrases";
+import { logger } from "@/utils/logger";
 
 export default function RecipeDetailPage() {
   const navigate = useNavigate();
@@ -137,7 +138,7 @@ export default function RecipeDetailPage() {
   useEffect(() => {
     // ✅ Check if recipe was passed via navigation state AND matches the URL ID
     if (location.state?.recipe && location.state.recipe.id === recipeId) {
-      console.log('📦 RecipeDetail: Using recipe from navigation state');
+      logger.cache('RecipeDetail', 'Using recipe from navigation state');
       const recipeFromState = location.state.recipe;
       setRecipe(recipeFromState);
 
@@ -153,7 +154,7 @@ export default function RecipeDetailPage() {
       setLoading(false);
     } else if (recipeId) {
       // Fallback to loading from API if no state or ID mismatch
-      console.log('🔄 RecipeDetail: Loading recipe from API');
+      logger.cache('RecipeDetail', 'Loading recipe from API');
       loadRecipe();
     } else {
       setLoading(false);
@@ -182,9 +183,9 @@ export default function RecipeDetailPage() {
       let allRecipes = appCache.getRecipes();
       
       if (allRecipes) {
-        console.log('📦 RecipeDetail: Using cached recipes');
+        logger.cache('RecipeDetail', 'Using cached recipes');
       } else {
-        console.log('🔄 RecipeDetail: Fetching recipes from API (cache miss)');
+        logger.cache('RecipeDetail', 'Fetching recipes from API (cache miss)');
         allRecipes = await Recipe.list();
         appCache.setRecipes(allRecipes);
       }
@@ -719,8 +720,8 @@ export default function RecipeDetailPage() {
     
     try {
       // Log the ingredients we're processing
-      console.log('Recipe ingredients to process:', recipe.ingredients);
-      console.log('Ingredients count:', recipe.ingredients?.length || 0);
+      logger.debug('Recipe ingredients to process:', recipe.ingredients);
+      logger.debug(`Ingredients count: ${recipe.ingredients?.length || 0}`);
       
       // Normalize ingredients to strings (handle both string and object formats)
       const normalizedIngredients = recipe.ingredients.map(ing => {
@@ -731,7 +732,7 @@ export default function RecipeDetailPage() {
       
       // Use LLM to extract clean ingredient names and categorize in ONE call
       const ingredientsList = normalizedIngredients.map((ing, idx) => `${idx + 1}. ${ing}`).join('\n');
-      console.log('Formatted ingredients list for LLM:', ingredientsList);
+      logger.debug('Formatted ingredients list for LLM:', ingredientsList);
       
       const extractionResponse = await InvokeLLM({
         prompt: `Extract clean ingredient names (without quantities, measurements, or descriptors) from these recipe ingredients and categorize each.
@@ -772,7 +773,7 @@ Return JSON with an array of objects, each containing:
         }
       });
 
-      console.log('LLM extraction response:', extractionResponse);
+      logger.debug('LLM extraction response:', extractionResponse);
       
       // Handle multiple response formats from LLM:
       // 1. { ingredients: [...] } - expected schema format
@@ -803,7 +804,7 @@ Return JSON with an array of objects, each containing:
         }
       }
       
-      console.log('Extracted ingredients count:', extractedIngredients.length);
+      logger.debug(`Extracted ingredients count: ${extractedIngredients.length}`);
       
       if (extractedIngredients.length === 0) {
         console.warn('No ingredients extracted from LLM response. Raw response:', JSON.stringify(extractionResponse));
@@ -1035,7 +1036,7 @@ Return JSON with an array of objects, each containing:
           for (const variant of variants.variants) {
             if (masterItemLookup.has(variant)) {
               masterItem = masterItemLookup.get(variant);
-              console.log(`✅ Master match: "${capitalizedName}" → "${masterItem.name}" (via "${variant}") - category: ${masterItem.category}, photo: ${masterItem.photo_url ? 'yes' : 'no'}`);
+              logger.success(`Master match: "${capitalizedName}" → "${masterItem.name}"`);
               break;
             }
           }
@@ -1056,7 +1057,7 @@ Return JSON with an array of objects, each containing:
       for (const itemData of itemsToCreate) {
         createdCount++;
         setImportStatus(`Adding item ${createdCount} of ${itemsToCreate.length}...`);
-        console.log(`🔎 Creating: "${itemData.name}" → category: ${itemData.category} → photo: ${itemData.photo_url ? '✅' : '❌'}`);
+        logger.import(`Creating "${itemData.name}" → category: ${itemData.category}`);
 
         await Item.create({
           list_id: targetListId,

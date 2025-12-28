@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import { appCache } from "@/components/utils/appCache";
+import { logger } from "@/utils/logger";
 
 export default function ShoppingModePage() {
   const navigate = useNavigate();
@@ -66,11 +67,11 @@ export default function ShoppingModePage() {
       // Check cache first for user
       let currentUser = appCache.getUser();
       if (!currentUser) {
-        console.log('🔄 ShoppingMode: Fetching user from API (cache miss)');
+        logger.cache('ShoppingMode', 'Fetching user from API (cache miss)');
         currentUser = await User.me();
         appCache.setUser(currentUser);
       } else {
-        console.log('📦 ShoppingMode: Using cached user data');
+        logger.cache('ShoppingMode', 'Using cached user data');
       }
       
       setUser(currentUser);
@@ -89,11 +90,11 @@ export default function ShoppingModePage() {
       let memberships = appCache.getListMemberships(currentUser.id);
       
       if (!memberships) {
-        console.log('🔄 ShoppingMode: Fetching ListMember from API (cache miss)');
+        logger.cache('ShoppingMode', 'Fetching ListMember from API (cache miss)');
         memberships = await ListMember.filter({ user_id: currentUser.id });
         appCache.setListMemberships(currentUser.id, memberships);
       } else {
-        console.log('📦 ShoppingMode: Using cached ListMember data');
+        logger.cache('ShoppingMode', 'Using cached ListMember data');
       }
       
       const approvedMemberships = memberships.filter(m => m.status === 'approved' || m.role === 'owner');
@@ -104,11 +105,11 @@ export default function ShoppingModePage() {
         let allLists = appCache.getShoppingListEntities();
         
         if (!allLists) {
-          console.log('🔄 ShoppingMode: Fetching ShoppingList entities from API (cache miss)');
+          logger.cache('ShoppingMode', 'Fetching ShoppingList entities from API (cache miss)');
           allLists = await ShoppingList.list();
           appCache.setShoppingListEntities(allLists);
         } else {
-          console.log('📦 ShoppingMode: Using cached ShoppingList entities');
+          logger.cache('ShoppingMode', 'Using cached ShoppingList entities');
         }
         
         const userLists = allLists.filter(list => listIds.includes(list.id) && !list.archived);
@@ -121,11 +122,11 @@ export default function ShoppingModePage() {
           const cachedList = appCache.getShoppingList(list.id);
           
           if (cachedList && cachedList.itemCounts) {
-            console.log(`📦 ShoppingMode: Using cached item counts for list ${list.id}`);
+            logger.cache('ShoppingMode', 'Using cached item counts for list');
             totalItemsCount += (cachedList.itemCounts.total || 0) + (cachedList.itemCounts.checked || 0);
             activeItemsCount += cachedList.itemCounts.total || 0;
           } else {
-            console.log(`🔄 ShoppingMode: Fetching items for list ${list.id} from API (cache miss)`);
+            logger.cache('ShoppingMode', 'Fetching items for list from API (cache miss)');
             const items = await Item.filter({ list_id: list.id });
             const activeItems = items.filter(item => !item.is_checked);
             const checkedItems = items.filter(item => item.is_checked);

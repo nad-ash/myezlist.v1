@@ -27,6 +27,7 @@ import UpgradePrompt from "@/components/common/UpgradePrompt";
 import { loadCommonItemsCache } from "@/components/utils/commonItemsCache";
 import { incrementUsage } from "@/components/utils/usageSync";
 import { OPERATIONS, PAGES } from "@/utils/trackingContext";
+import { logger } from "@/utils/logger";
 
 const categories = [
   "Produce",
@@ -393,7 +394,7 @@ export default function ImportListPage() {
       // Build master item lookup map with singular/plural variants for intelligent matching
       setCurrentStatus('Building master item lookup...');
       const masterItemLookup = buildMasterItemLookup(commonItemsCache);
-      console.log(`📚 Master item lookup built with ${masterItemLookup.size} variants from ${commonItemsCache.length} items`);
+      logger.import(`Master item lookup built with ${masterItemLookup.size} variants`);
 
       // Step 1: Filter out duplicates and prepare items for processing
       const itemsToProcess = [];
@@ -415,7 +416,7 @@ export default function ImportListPage() {
         for (const variant of variants.variants) {
           if (masterItemLookup.has(variant)) {
             commonItemMatch = masterItemLookup.get(variant);
-            console.log(`✅ Master match: "${capitalizedName}" → "${commonItemMatch.name}" (via variant "${variant}")`);
+            logger.success(`Master match: "${capitalizedName}" → "${commonItemMatch.name}"`);
             break;
           }
         }
@@ -493,7 +494,7 @@ export default function ImportListPage() {
       const itemsNeedingAICategorization = itemsToProcess.filter(item => item.needsAICategorization);
       const itemsWithMasterMatch = itemsToProcess.filter(item => !item.needsAICategorization);
       
-      console.log(`📊 Import summary: ${itemsWithMasterMatch.length} items matched master list, ${itemsNeedingAICategorization.length} items need AI categorization`);
+      logger.import(`Summary: ${itemsWithMasterMatch.length} matched, ${itemsNeedingAICategorization.length} need AI`);
       
       if (withAutoCategorization && itemsNeedingAICategorization.length > 0) {
         setCurrentStatus(`Auto-categorizing ${itemsNeedingAICategorization.length} items with AI (${itemsWithMasterMatch.length} already matched)...`);
@@ -502,7 +503,7 @@ export default function ImportListPage() {
           // Prepare list for LLM prompt, using only items that need categorization
           const itemsList = itemsNeedingAICategorization.map((item, idx) => `${idx + 1}. ${item.name}`).join('\n');
           
-          console.log('🔍 Items to categorize (no master match):', itemsList);
+          logger.import(`Items to categorize: ${itemsList.length} items`);
           
           const categoryResponse = await InvokeLLM({
           prompt: `Given the following grocery/household items, classify each into one of these categories: ${categories.join(", ")}.
@@ -526,36 +527,36 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
           }
         });
         
-        console.log('🤖 Full LLM Response:', JSON.stringify(categoryResponse, null, 2));
+        logger.debug('🤖 Full LLM Response:', JSON.stringify(categoryResponse, null, 2));
         
         // Extract categories from response
         let rawCategories = null;
         if (categoryResponse) {
           if (categoryResponse.categories) {
             rawCategories = categoryResponse.categories;
-            console.log('✅ Found categories at categoryResponse.categories');
+            logger.debug('Found categories at categoryResponse.categories');
           } else if (categoryResponse.properties && categoryResponse.properties.categories) {
             rawCategories = categoryResponse.properties.categories;
-            console.log('✅ Found categories at categoryResponse.properties.categories');
+            logger.debug('Found categories at categoryResponse.properties.categories');
           } else {
             // The response itself might be the categories object (direct top-level response)
             rawCategories = categoryResponse;
-            console.log('✅ Using categoryResponse directly (top-level response)');
+            logger.debug('Using categoryResponse directly (top-level response)');
           }
         }
         
         if (rawCategories) {
           categoriesMap = {};
-          console.log('🗂️ Raw categories from LLM:', rawCategories);
+          logger.debug('Raw categories from LLM:', rawCategories);
           
           for (const [key, value] of Object.entries(rawCategories)) {
             // Remove number prefix (e.g., "1. Milk" -> "Milk")
             const cleanedKey = key.replace(/^\d+\.\s*/, '').trim().toLowerCase();
             categoriesMap[cleanedKey] = value;
-            console.log(`  ✏️ Normalized: "${key}" → "${cleanedKey}" = ${value}`);
+            logger.debug(`Normalized: "${key}" → "${cleanedKey}" = ${value}`);
           }
           
-          console.log('📋 Final categoriesMap:', categoriesMap);
+          logger.debug('Final categoriesMap:', categoriesMap);
         } else {
           console.warn('⚠️ Could not find categories in LLM response');
         }
@@ -577,7 +578,7 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
         );
       } else if (withAutoCategorization && itemsNeedingAICategorization.length === 0) {
         // All items matched master list - no AI categorization needed!
-        console.log('🎉 All items matched master list - skipping AI categorization (saving credits!)');
+        logger.success('All items matched master list - skipping AI categorization!');
         setCurrentStatus(`All ${itemsWithMasterMatch.length} items matched master list - no AI needed!`);
       }
 
@@ -600,7 +601,7 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
         const aiCategory = categoriesMap[normalizedName];
         const category = aiCategory || item.masterItemCategory || 'Other';
         
-        console.log(`🔎 Looking up: "${item.name}" → AI category: ${aiCategory || 'none'}, Master category: ${item.masterItemCategory || 'none'} → Final: ${category}`);
+        logger.import(`Looking up "${item.name}" → Final category: ${category}`);
 
         // Use master item photo by default, or empty string if needs AI generation
         const hasExistingPhoto = !!item.masterItemPhotoUrl;
@@ -608,7 +609,7 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
         const photoUrl = hasExistingPhoto ? item.masterItemPhotoUrl : '';
         
         if (hasExistingPhoto) {
-          console.log(`✅ Using master list photo for "${item.name}": ${item.masterItemPhotoUrl.substring(0, 50)}...`);
+          logger.success(`Using master list photo for "${item.name}"`);
         }
 
         // Create the item (with or without photo)
@@ -637,7 +638,7 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
       
       // Helper function for background image generation (runs after navigation)
       const generateImagesInBackground = async (items) => {
-        console.log(`🎨 Starting background image generation for ${items.length} items`);
+        logger.background(`Starting image generation for ${items.length} items`);
         
         const BATCH_SIZE = 3; // Process 3 images concurrently
         
@@ -664,7 +665,7 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
                   }
                 );
                 
-                console.log(`✅ Background: Image generated for "${item.name}"`);
+                logger.success(`Image generated for "${item.name}"`);
                 return { success: true, name: item.name };
               }
             } catch (imgError) {
@@ -677,12 +678,12 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
           await Promise.allSettled(batchPromises);
         }
         
-        console.log(`🎉 Background image generation complete for ${items.length} items`);
+        logger.success(`Background image generation complete for ${items.length} items`);
       };
       
       // Fire off background image generation (don't await - let it run in background)
       if (itemsNeedingImages.length > 0) {
-        console.log(`📸 Scheduling background image generation for ${itemsNeedingImages.length} items`);
+        logger.background(`Scheduling image generation for ${itemsNeedingImages.length} items`);
         // This runs in background after navigation - images will appear as they're generated
         generateImagesInBackground(itemsNeedingImages).catch(err => 
           console.warn('Background image generation had errors:', err)

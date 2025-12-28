@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { appCache } from "@/components/utils/appCache";
 import { trackItem, trackShoppingList, trackShare, PAGES, OPERATIONS } from "@/utils/trackingContext";
 import { supabase } from "@/api/supabaseClient";
+import { logger } from "@/utils/logger";
 
 import ItemCard from "../components/items/ItemCard";
 
@@ -86,14 +87,14 @@ export default function ListViewPage() {
       },
       timestamp: Date.now()
     });
-    console.log(`📡 ListView: Cache updated with ${updatedItems.length} items`);
+    logger.realtime('ListView', `Cache updated with ${updatedItems.length} items`);
   }, [listId, list]);
 
   // Supabase Realtime subscription for live item updates (e.g., when images are generated in background)
   useEffect(() => {
     if (!listId) return;
 
-    console.log(`📡 ListView: Setting up realtime subscription for list ${listId}`);
+    logger.realtime('ListView', 'Setting up realtime subscription');
     
     const channel = supabase
       .channel(`list-items-${listId}`)
@@ -106,7 +107,7 @@ export default function ListViewPage() {
           filter: `list_id=eq.${listId}`
         },
         (payload) => {
-          console.log(`📡 ListView: Received realtime update for item ${payload.new.id}`, payload.new);
+          logger.realtime('ListView', 'Received realtime update', payload.new.id, payload.new);
           // Update the specific item in state without full reload
           setItems(prevItems => {
             const updatedItems = prevItems.map(item => 
@@ -129,7 +130,7 @@ export default function ListViewPage() {
           filter: `list_id=eq.${listId}`
         },
         (payload) => {
-          console.log(`📡 ListView: Received realtime INSERT for item ${payload.new.id}`);
+          logger.realtime('ListView', 'Received realtime INSERT', payload.new.id);
           // Add new item to state if not already present
           setItems(prevItems => {
             const exists = prevItems.some(item => item.id === payload.new.id);
@@ -150,7 +151,7 @@ export default function ListViewPage() {
           filter: `list_id=eq.${listId}`
         },
         (payload) => {
-          console.log(`📡 ListView: Received realtime DELETE for item ${payload.old.id}`);
+          logger.realtime('ListView', 'Received realtime DELETE', payload.old.id);
           // Remove the deleted item from state
           setItems(prevItems => {
             const updatedItems = prevItems.filter(item => item.id !== payload.old.id);
@@ -161,12 +162,12 @@ export default function ListViewPage() {
         }
       )
       .subscribe((status) => {
-        console.log(`📡 ListView: Realtime subscription status: ${status}`);
+        logger.realtime('ListView', `Subscription status: ${status}`);
       });
 
     // Cleanup subscription on unmount or listId change
     return () => {
-      console.log(`📡 ListView: Cleaning up realtime subscription for list ${listId}`);
+      logger.realtime('ListView', 'Cleaning up realtime subscription');
       supabase.removeChannel(channel);
     };
   }, [listId, updateCacheWithItems]);
@@ -175,7 +176,7 @@ export default function ListViewPage() {
     setRefreshing(true);
     
     // Clear cache for this specific list
-    console.log(`🔄 ListView: Manual refresh - clearing cache for list ${listId}`);
+    logger.cache('ListView', 'Manual refresh - clearing cache');
     appCache.clearShoppingList(listId);
     
     // Reload data from API
@@ -195,11 +196,11 @@ export default function ListViewPage() {
       // Check cache first for user
       let currentUser = appCache.getUser();
       if (!currentUser) {
-        console.log('🔄 ListView: Fetching user from API (cache miss)');
+        logger.cache('ListView', 'Fetching user from API (cache miss)');
         currentUser = await User.me();
         appCache.setUser(currentUser);
       } else {
-        console.log('📦 ListView: Using cached user data');
+        logger.cache('ListView', 'Using cached user data');
       }
       
       setUser(currentUser);
@@ -208,11 +209,11 @@ export default function ListViewPage() {
       let allMemberships = appCache.getListMemberships(currentUser.id);
       
       if (!allMemberships) {
-        console.log('🔄 ListView: Fetching ListMember from API (cache miss)');
+        logger.cache('ListView', 'Fetching ListMember from API (cache miss)');
         allMemberships = await ListMember.filter({ user_id: currentUser.id });
         appCache.setListMemberships(currentUser.id, allMemberships);
       } else {
-        console.log('📦 ListView: Using cached ListMember data');
+        logger.cache('ListView', 'Using cached ListMember data');
       }
       
       const membership = allMemberships.find(m => m.list_id === listId);
@@ -235,11 +236,11 @@ export default function ListViewPage() {
       let itemsData = null;
       
       if (cachedList && cachedList.list && cachedList.items) {
-        console.log('📦 ListView: Using cached list and items data');
+        logger.cache('ListView', 'Using cached list and items data');
         listData = cachedList.list;
         itemsData = cachedList.items;
       } else {
-        console.log('🔄 ListView: Fetching list and items from API (cache miss)');
+        logger.cache('ListView', 'Fetching list and items from API (cache miss)');
         
         // Try to get list from cached entities first
         if (cachedList && cachedList.list) {
@@ -247,12 +248,12 @@ export default function ListViewPage() {
         } else {
           const cachedEntities = appCache.getShoppingListEntities();
           if (cachedEntities) {
-            console.log('📦 ListView: Using cached ShoppingList entities');
+            logger.cache('ListView', 'Using cached ShoppingList entities');
             listData = cachedEntities.find(l => l.id === listId);
           }
           
           if (!listData) {
-            console.log('🔄 ListView: Fetching ShoppingList entities from API (cache miss)');
+            logger.cache('ListView', 'Fetching ShoppingList entities from API (cache miss)');
             const allLists = await ShoppingList.list();
             appCache.setShoppingListEntities(allLists);
             listData = allLists.find(l => l.id === listId);
@@ -327,7 +328,7 @@ export default function ListViewPage() {
       await updateStatCount('total_items', 1);
 
       // Invalidate this specific list's cache since item count changed
-      console.log(`🗑️ ListView: Clearing cache for list ${listId} (item added)`);
+      logger.cache('ListView', 'Clearing cache (item added)');
       appCache.clearShoppingList(listId);
 
       loadData(); // Reload data to get the new item and updated stats
@@ -346,7 +347,7 @@ export default function ListViewPage() {
       setEditingItem(null);
 
       // Invalidate cache since item data changed
-      console.log(`🗑️ ListView: Clearing cache for list ${listId} (item edited)`);
+      logger.cache('ListView', 'Clearing cache (item edited)');
       appCache.clearShoppingList(listId);
     } catch (error) {
       console.error("Error updating item:", error);
@@ -373,7 +374,7 @@ export default function ListViewPage() {
       await Item.update(item.id, updatedData, trackingContext);
 
       // Invalidate this specific list's cache since active item count changed
-      console.log(`🗑️ ListView: Clearing cache for list ${listId} (item checked status changed)`);
+      logger.cache('ListView', 'Clearing cache (item checked status changed)');
       appCache.clearShoppingList(listId);
     } catch (error) {
       console.error("Error updating item:", error);
@@ -403,7 +404,7 @@ export default function ListViewPage() {
       await Item.update(item.id, updatedData, trackingContext);
 
       // Invalidate cache since item data changed
-      console.log(`🗑️ ListView: Clearing cache for list ${listId} (item favorite toggled)`);
+      logger.cache('ListView', 'Clearing cache (item favorite toggled)');
       appCache.clearShoppingList(listId);
     } catch (error) {
       console.error("Error updating favorite:", error);
@@ -436,7 +437,7 @@ export default function ListViewPage() {
       await updateStatCount('total_items', -1);
 
       // Invalidate this specific list's cache since item count changed
-      console.log(`🗑️ ListView: Clearing cache for list ${listId} (item deleted)`);
+      logger.cache('ListView', 'Clearing cache (item deleted)');
       appCache.clearShoppingList(listId);
     } catch (error) {
       console.error("Error deleting item:", error);
@@ -519,7 +520,7 @@ export default function ListViewPage() {
       }
 
       // Clear all related caches
-      console.log(`🗑️ ListView: Clearing all related caches (list deleted)`);
+      logger.cache('ListView', 'Clearing all related caches (list deleted)');
       appCache.clearShoppingList(listId);
       appCache.clearShoppingListEntities();
       appCache.clearListMemberships(user.id); // NEW: Clear list memberships cache
