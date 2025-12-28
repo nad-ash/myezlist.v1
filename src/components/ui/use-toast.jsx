@@ -2,7 +2,7 @@
 import { useState, useEffect, createContext, useContext } from "react";
 
 const TOAST_LIMIT = 20;
-const TOAST_REMOVE_DELAY = 1000000;
+const TOAST_REMOVE_DELAY = 5000; // 5 seconds default auto-dismiss
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -158,6 +158,11 @@ function useToast() {
     ...state,
     toast,
     dismiss: (toastId) => dispatch({ type: actionTypes.DISMISS_TOAST, toastId }),
+    // Immediately remove toast without delay (for manual close clicks)
+    remove: (toastId) => {
+      clearFromRemoveQueue(toastId);
+      dispatch({ type: actionTypes.REMOVE_TOAST, toastId });
+    },
   };
 }
 

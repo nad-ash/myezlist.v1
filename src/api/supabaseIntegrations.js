@@ -73,21 +73,30 @@ export const AI_USE_CASES = {
 /**
  * Invoke LLM (Large Language Model)
  * Calls the ai-invoke-llm Edge Function which handles OpenAI/Gemini securely
- * @param {Object} params - { prompt, response_json_schema, useCase }
+ * @param {Object} params - { prompt, response_json_schema, useCase, temperature }
  * @param {string} params.prompt - The prompt to send to the LLM
  * @param {Object} params.response_json_schema - Optional JSON schema for structured responses
  * @param {string} params.useCase - 'recipe' | 'image' | 'default' (determines which model to use)
+ * @param {number} params.temperature - Optional temperature (0.0-2.0). Lower = more deterministic, higher = more creative
+ *                                       Use 0.0-0.3 for structured data extraction, 0.7 (default) for balanced, 0.8-1.0 for creative
  * @returns {Promise<Object>} - Parsed JSON response
  */
-export async function InvokeLLM({ prompt, response_json_schema, useCase = 'default' }) {
+export async function InvokeLLM({ prompt, response_json_schema, useCase = 'default', temperature }) {
   try {
-    console.log(`🤖 Calling ai-invoke-llm Edge Function (useCase: ${useCase})`);
+    console.log(`🤖 Calling ai-invoke-llm Edge Function (useCase: ${useCase}, temp: ${temperature ?? 'default'})`);
     
-    const result = await callEdgeFunction('ai-invoke-llm', {
+    const body = {
       prompt,
       response_json_schema,
       useCase
-    });
+    };
+    
+    // Only include temperature if explicitly provided
+    if (temperature !== undefined) {
+      body.temperature = temperature;
+    }
+    
+    const result = await callEdgeFunction('ai-invoke-llm', body);
     
     console.log(`✅ LLM response received`);
     return result;
@@ -105,11 +114,11 @@ export async function InvokeLLM({ prompt, response_json_schema, useCase = 'defau
  * @param {string} params.prompt - The image generation prompt
  * @returns {Promise<Object>} - { url: string } - Supabase Storage URL
  */
-export async function GenerateImage({ prompt }) {
+export async function GenerateImage({ prompt, quality = 'medium' }) {
   try {
-    console.log(`📷 Calling ai-generate-image Edge Function`);
+    console.log(`📷 Calling ai-generate-image Edge Function (quality: ${quality})`);
     
-    const result = await callEdgeFunction('ai-generate-image', { prompt });
+    const result = await callEdgeFunction('ai-generate-image', { prompt, quality });
     
     console.log(`✅ Image generated: ${result.url?.substring(0, 50)}...`);
     return result;

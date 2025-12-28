@@ -581,9 +581,12 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
         setCurrentStatus(`All ${itemsWithMasterMatch.length} items matched master list - no AI needed!`);
       }
 
-      // Step 3: Create items with categories, and optionally generate images
+      // Step 3: Create items immediately (fast), images will be generated in background
       let itemsCreatedCount = 0;
+      const itemsNeedingImages = []; // Track items that need AI image generation
       
+      // Create all items immediately (without AI-generated images)
+      setCurrentStatus('Creating items...');
       for (let i = 0; i < itemsToProcess.length; i++) {
         const item = itemsToProcess[i];
         setImportProgress({ 
@@ -599,42 +602,18 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
         
         console.log(`🔎 Looking up: "${item.name}" → AI category: ${aiCategory || 'none'}, Master category: ${item.masterItemCategory || 'none'} → Final: ${category}`);
 
-        // Use master item photo by default
-        let photoUrl = item.masterItemPhotoUrl || '';
+        // Use master item photo by default, or empty string if needs AI generation
+        const hasExistingPhoto = !!item.masterItemPhotoUrl;
+        const needsAIImage = withAIImages && !hasExistingPhoto;
+        const photoUrl = hasExistingPhoto ? item.masterItemPhotoUrl : '';
         
-        // Generate AI image ONLY if:
-        // 1. AI Images option is enabled, AND
-        // 2. Item doesn't already have a photo from master list
-        const needsAIImage = withAIImages && !item.masterItemPhotoUrl;
-        
-        if (needsAIImage) {
-          try {
-            setCurrentStatus(`Generating image for "${item.name}" (may take 10-15 seconds)...`);
-            const imagePrompt = `A clean, professional product photo of ${item.name} on a white background, centered, well-lit, high quality product photography`;
-            const imageResult = await GenerateImage({ prompt: imagePrompt });
-            if (imageResult.url) {
-              photoUrl = imageResult.url;
-            }
-
-            // Consume 1 credit for image generation
-            await consumeCredits(
-              'bulk_import_image',
-              `AI image generation for "${item.name}"`,
-              {
-                item_name: item.name,
-                list_id: targetListId
-              }
-            );
-          } catch (imgError) {
-            console.warn(`Image generation failed for "${item.name}", continuing without image:`, imgError);
-          }
-        } else if (item.masterItemPhotoUrl) {
+        if (hasExistingPhoto) {
           console.log(`✅ Using master list photo for "${item.name}": ${item.masterItemPhotoUrl.substring(0, 50)}...`);
         }
 
-        // Create the item with organic flag
+        // Create the item (with or without photo)
         setCurrentStatus(`Adding "${item.name}" to list...`);
-        await Item.create({
+        const createdItem = await Item.create({
           list_id: targetListId,
           name: item.name,
           quantity: item.quantity,
@@ -644,7 +623,70 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
           is_organic: item.isOrganic,
         });
         
+        // Track items that need AI image generation
+        if (needsAIImage && createdItem?.id) {
+          itemsNeedingImages.push({
+            id: createdItem.id,
+            name: item.name,
+            listId: targetListId
+          });
+        }
+        
         itemsCreatedCount++;
+      }
+      
+      // Helper function for background image generation (runs after navigation)
+      const generateImagesInBackground = async (items) => {
+        console.log(`🎨 Starting background image generation for ${items.length} items`);
+        
+        const BATCH_SIZE = 3; // Process 3 images concurrently
+        
+        for (let i = 0; i < items.length; i += BATCH_SIZE) {
+          const batch = items.slice(i, i + BATCH_SIZE);
+          
+          // Generate images for this batch in parallel
+          const batchPromises = batch.map(async (item) => {
+            try {
+              const imagePrompt = `A clean, professional product photo of ${item.name} on a white background, centered, well-lit, product photography`;
+              const imageResult = await GenerateImage({ prompt: imagePrompt, quality: 'medium' });
+              
+              if (imageResult?.url) {
+                // Update the item with the generated image
+                await Item.update(item.id, { photo_url: imageResult.url });
+                
+                // Consume 1 credit for image generation
+                await consumeCredits(
+                  'bulk_import_image',
+                  `AI image generation for "${item.name}"`,
+                  {
+                    item_name: item.name,
+                    list_id: item.listId
+                  }
+                );
+                
+                console.log(`✅ Background: Image generated for "${item.name}"`);
+                return { success: true, name: item.name };
+              }
+            } catch (imgError) {
+              console.warn(`Background: Image generation failed for "${item.name}":`, imgError);
+              return { success: false, name: item.name, error: imgError };
+            }
+          });
+          
+          // Wait for batch to complete before starting next batch
+          await Promise.allSettled(batchPromises);
+        }
+        
+        console.log(`🎉 Background image generation complete for ${items.length} items`);
+      };
+      
+      // Fire off background image generation (don't await - let it run in background)
+      if (itemsNeedingImages.length > 0) {
+        console.log(`📸 Scheduling background image generation for ${itemsNeedingImages.length} items`);
+        // This runs in background after navigation - images will appear as they're generated
+        generateImagesInBackground(itemsNeedingImages).catch(err => 
+          console.warn('Background image generation had errors:', err)
+        );
       }
       
       // Update user's current_total_items count
@@ -674,15 +716,19 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
         }).catch(err => console.warn('Activity tracking failed:', err));
       }
 
-      setCurrentStatus(`Import complete! Navigating to list...`);
+      const imagesNote = itemsNeedingImages.length > 0 
+        ? ` (${itemsNeedingImages.length} images generating in background)` 
+        : '';
+      setCurrentStatus(`Import complete!${imagesNote} Navigating to list...`);
       
       // Clear cache for this list before navigating
       const { appCache } = await import('@/components/utils/appCache');
       appCache.clearShoppingList(targetListId);
       
+      // Navigate immediately - images will appear in the list as they're generated
       setTimeout(() => {
         navigate(createPageUrl(`ListView?listId=${targetListId}`));
-      }, 1000);
+      }, 500); // Reduced from 1000ms for faster UX
     } catch (error) {
       console.error("Error importing items:", error);
       alert("Failed to import items. Please try again.");

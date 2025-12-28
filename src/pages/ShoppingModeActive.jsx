@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { User, ListMember, ShoppingList, Item, ActivityTracking } from "@/api/entities";
 import { trackItem, OPERATIONS, PAGES } from "@/utils/trackingContext";
 import {
@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import { appCache } from "@/components/utils/appCache";
+import { supabase } from "@/api/supabaseClient";
 
 import ItemCard from "../components/items/ItemCard";
 
@@ -80,6 +81,107 @@ export default function ShoppingModeActivePage() {
       }
     }
   }, [lists, selectedListId]); // Dependency on lists and selectedListId to react to their changes
+
+  // Helper to update cache with new items data
+  const updateCacheWithItems = useCallback((updatedItems, listData) => {
+    if (!selectedListId) return;
+    
+    const activeItems = updatedItems.filter((item) => !item.is_checked);
+    const checkedItems = updatedItems.filter((item) => item.is_checked);
+    
+    appCache.setShoppingList(selectedListId, {
+      list: listData || lists.find(l => l.id === selectedListId),
+      items: updatedItems,
+      itemCounts: {
+        total: activeItems.length,
+        checked: checkedItems.length
+      },
+      timestamp: Date.now()
+    });
+    console.log(`📡 ShoppingModeActive: Cache updated with ${updatedItems.length} items`);
+  }, [selectedListId, lists]);
+
+  // Supabase Realtime subscription for live item updates (e.g., when images are generated in background)
+  useEffect(() => {
+    if (!selectedListId) return;
+
+    console.log(`📡 ShoppingModeActive: Setting up realtime subscription for list ${selectedListId}`);
+    
+    const channel = supabase
+      .channel(`shopping-mode-items-${selectedListId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'items',
+          filter: `list_id=eq.${selectedListId}`
+        },
+        (payload) => {
+          console.log(`📡 ShoppingModeActive: Received realtime update for item ${payload.new.id}`, payload.new);
+          // Update the specific item in state without full reload
+          setItems(prevItems => {
+            const updatedItems = prevItems.map(item => 
+              item.id === payload.new.id 
+                ? { ...item, ...payload.new }
+                : item
+            );
+            // Also update the cache so other pages see the updated data
+            updateCacheWithItems(updatedItems);
+            return updatedItems;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'items',
+          filter: `list_id=eq.${selectedListId}`
+        },
+        (payload) => {
+          console.log(`📡 ShoppingModeActive: Received realtime INSERT for item ${payload.new.id}`);
+          // Add new item to state if not already present
+          setItems(prevItems => {
+            const exists = prevItems.some(item => item.id === payload.new.id);
+            if (exists) return prevItems;
+            const updatedItems = [payload.new, ...prevItems];
+            // Also update the cache so other pages see the new item
+            updateCacheWithItems(updatedItems);
+            return updatedItems;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'items',
+          filter: `list_id=eq.${selectedListId}`
+        },
+        (payload) => {
+          console.log(`📡 ShoppingModeActive: Received realtime DELETE for item ${payload.old.id}`);
+          // Remove the deleted item from state
+          setItems(prevItems => {
+            const updatedItems = prevItems.filter(item => item.id !== payload.old.id);
+            // Also update the cache so other pages see the deletion
+            updateCacheWithItems(updatedItems);
+            return updatedItems;
+          });
+        }
+      )
+      .subscribe((status) => {
+        console.log(`📡 ShoppingModeActive: Realtime subscription status: ${status}`);
+      });
+
+    // Cleanup subscription on unmount or selectedListId change
+    return () => {
+      console.log(`📡 ShoppingModeActive: Cleaning up realtime subscription for list ${selectedListId}`);
+      supabase.removeChannel(channel);
+    };
+  }, [selectedListId, updateCacheWithItems]);
 
   const loadLists = async () => {
     try {

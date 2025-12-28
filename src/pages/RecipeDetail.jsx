@@ -53,6 +53,7 @@ import SignupPrompt from "@/components/common/SignupPrompt";
 import { incrementUsage } from "@/components/utils/usageSync";
 import { appCache } from "@/components/utils/appCache";
 import { canCreateCustomRecipe } from "@/components/utils/tierManager";
+import { useRecipeLoadingPhrases } from "@/hooks/useRecipeLoadingPhrases";
 
 export default function RecipeDetailPage() {
   const navigate = useNavigate();
@@ -83,11 +84,15 @@ export default function RecipeDetailPage() {
   const [newListName, setNewListName] = useState('');
   const [createNewList, setCreateNewList] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [parsingIngredients, setParsingIngredients] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const [importStatus, setImportStatus] = useState('');
   const [importItems, setImportItems] = useState([]);
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [importTargetListId, setImportTargetListId] = useState('');
+
+  // Use rotating loading phrases for ingredient parsing
+  const ingredientLoadingPhrase = useRecipeLoadingPhrases(parsingIngredients, 'ingredients', 2500);
   const [includeQuantities, setIncludeQuantities] = useState(false);
 
   // Credit management states
@@ -709,6 +714,7 @@ export default function RecipeDetailPage() {
     }
 
     setImporting(true);
+    setParsingIngredients(true);
     setShowAddToListDialog(true);
     
     try {
@@ -768,9 +774,11 @@ Return JSON with an array of objects, each containing:
 
       console.log('LLM extraction response:', extractionResponse);
       
-      // Handle both response formats:
-      // 1. { ingredients: [...] } - wrapped in object
-      // 2. [...] - direct array
+      // Handle multiple response formats from LLM:
+      // 1. { ingredients: [...] } - expected schema format
+      // 2. { results: [...] } - alternative format LLM sometimes uses
+      // 3. [...] - direct array
+      // 4. { 0: ..., 1: ..., } - object with numeric keys (array-like)
       let extractedIngredients = [];
       if (Array.isArray(extractionResponse)) {
         // Response is a direct array
@@ -778,11 +786,20 @@ Return JSON with an array of objects, each containing:
       } else if (extractionResponse?.ingredients) {
         // Response is wrapped in { ingredients: [...] }
         extractedIngredients = extractionResponse.ingredients;
+      } else if (extractionResponse?.results) {
+        // Response is wrapped in { results: [...] } - LLM sometimes uses this key
+        extractedIngredients = extractionResponse.results;
+      } else if (extractionResponse?.items) {
+        // Response is wrapped in { items: [...] } - another common LLM format
+        extractedIngredients = extractionResponse.items;
       } else if (typeof extractionResponse === 'object' && extractionResponse !== null) {
         // Response might be an object with numeric keys (array-like)
         const keys = Object.keys(extractionResponse);
         if (keys.length > 0 && keys.every(k => !isNaN(parseInt(k)))) {
           extractedIngredients = Object.values(extractionResponse);
+        } else if (keys.length === 1 && Array.isArray(extractionResponse[keys[0]])) {
+          // Single key with array value - use that array regardless of key name
+          extractedIngredients = extractionResponse[keys[0]];
         }
       }
       
@@ -806,6 +823,7 @@ Return JSON with an array of objects, each containing:
       setCreateNewList(false);
       setNewListName('');
       setIncludeQuantities(false);
+      setParsingIngredients(false); // Done parsing
       await loadUserLists();
     } catch (error) {
       console.error("Error extracting ingredients:", error);
@@ -815,6 +833,7 @@ Return JSON with an array of objects, each containing:
         variant: "destructive",
       });
       setShowAddToListDialog(false);
+      setParsingIngredients(false);
     }
     
     setImporting(false);
@@ -932,7 +951,7 @@ Return JSON with an array of objects, each containing:
         existingItems.map((item) => [item.name.toLowerCase().trim(), item])
       );
 
-      // Load master item list for intelligent image matching
+      // Load master item list for intelligent image matching and category overrides
       setImportStatus('Loading item database...');
       const masterItems = await CommonItem.list();
       
@@ -1016,7 +1035,7 @@ Return JSON with an array of objects, each containing:
           for (const variant of variants.variants) {
             if (masterItemLookup.has(variant)) {
               masterItem = masterItemLookup.get(variant);
-              console.log(`✅ Master match: "${capitalizedName}" → "${masterItem.name}" (via "${variant}")`);
+              console.log(`✅ Master match: "${capitalizedName}" → "${masterItem.name}" (via "${variant}") - category: ${masterItem.category}, photo: ${masterItem.photo_url ? 'yes' : 'no'}`);
               break;
             }
           }
@@ -1024,7 +1043,8 @@ Return JSON with an array of objects, each containing:
           itemsToCreate.push({
             name: capitalizedName,
             quantity: includeQuantities ? importItem.quantity : '',
-            category: importItem.category || 'Other',
+            // Prefer master item category (more accurate), fallback to LLM category
+            category: masterItem?.category || importItem.category || 'Other',
             photo_url: masterItem?.photo_url || null
           });
         }
@@ -1496,22 +1516,35 @@ Return JSON with an array of objects, each containing:
                 <div className="text-center">
                   <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
                   <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">
-                    Adding Ingredients...
+                    {parsingIngredients ? 'Analyzing Ingredients...' : 'Adding Ingredients...'}
                   </h3>
-                  <p className="text-slate-600 dark:text-slate-400 mb-4">
-                    {importStatus || 'Preparing...'}
-                  </p>
-                  {importProgress.total > 0 && (
+                  {parsingIngredients ? (
                     <>
-                      <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3">
-                        <div
-                          className="bg-gradient-to-r from-blue-500 to-indigo-600 h-3 rounded-full transition-all duration-300"
-                          style={{ width: `${Math.min(100, (importProgress.current / importProgress.total) * 100)}%` }}
-                        />
-                      </div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-                        {Math.round((importProgress.current / importProgress.total) * 100)}% complete
+                      <p className="text-slate-600 dark:text-slate-400 mb-4 min-h-[24px] transition-all duration-300">
+                        {ingredientLoadingPhrase || '🧠 Processing your ingredients...'}
                       </p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                        This typically takes 5-15 seconds
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-slate-600 dark:text-slate-400 mb-4">
+                        {importStatus || 'Preparing...'}
+                      </p>
+                      {importProgress.total > 0 && (
+                        <>
+                          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3">
+                            <div
+                              className="bg-gradient-to-r from-blue-500 to-indigo-600 h-3 rounded-full transition-all duration-300"
+                              style={{ width: `${Math.min(100, (importProgress.current / importProgress.total) * 100)}%` }}
+                            />
+                          </div>
+                          <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+                            {Math.round((importProgress.current / importProgress.total) * 100)}% complete
+                          </p>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
