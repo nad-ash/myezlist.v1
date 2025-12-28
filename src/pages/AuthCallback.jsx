@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { supabase, supabaseAuth } from "@/api/supabaseClient";
-import { linkSupabaseUserToBase44 } from "@/api/base44Link";
-import { BACKEND_PROVIDER } from "@/api/config";
+import { supabase } from "@/api/supabaseClient";
 import { Loader2 } from "lucide-react";
 
 /**
@@ -56,16 +54,6 @@ export default function AuthCallback() {
 
             if (insertError) {
               console.error('Error creating profile:', insertError);
-            }
-          }
-
-          // If using Base44 backend, link the Supabase user to Base44
-          if (BACKEND_PROVIDER === 'base44') {
-            try {
-              await linkSupabaseUserToBase44(session.user);
-            } catch (linkError) {
-              console.warn('Failed to link to Base44, continuing anyway:', linkError);
-              // Don't block login if linking fails
             }
           }
 

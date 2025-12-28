@@ -8,8 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabaseAuth, supabase } from "@/api/supabaseClient";
-import { linkSupabaseUserToBase44 } from "@/api/base44Link";
-import { BACKEND_PROVIDER } from "@/api/config";
 import { Loader2, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
@@ -52,17 +50,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const { data } = await supabaseAuth.signInWithPassword(signInEmail, signInPassword);
-      
-      // If using Base44 backend, link the Supabase user to Base44
-      if (BACKEND_PROVIDER === 'base44' && data?.user) {
-        try {
-          await linkSupabaseUserToBase44(data.user);
-        } catch (linkError) {
-          console.warn('Failed to link to Base44, continuing anyway:', linkError);
-          // Don't block login if linking fails - user can still use the app
-        }
-      }
+      await supabaseAuth.signInWithPassword(signInEmail, signInPassword);
       
       // Redirect to intended destination or Home
       const redirectUrl = localStorage.getItem('redirectAfterLogin') || createPageUrl("Home");

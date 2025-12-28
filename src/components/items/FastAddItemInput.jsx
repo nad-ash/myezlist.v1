@@ -34,7 +34,7 @@ const capitalizeWords = (str) => {
   return str.replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
-export default function FastAddItemInput({ listId, onItemAdded }) {
+export default function FastAddItemInput({ listId, existingItems = [], onItemAdded }) {
   const [itemName, setItemName] = useState('');
   const [isFastAdding, setIsFastAdding] = useState(false);
   const [currentStatus, setCurrentStatus] = useState('');
@@ -164,44 +164,52 @@ export default function FastAddItemInput({ listId, onItemAdded }) {
       return;
     }
 
-    // Check for duplicate item in the list
-    const existingItems = await Item.filter({ list_id: listId });
-    const normalizedName = itemName.toLowerCase().trim();
-    const duplicate = existingItems.find(item => 
-      item.name.toLowerCase().trim() === normalizedName
-    );
-    
-    if (duplicate) {
-      alert(`An item named "${itemName}" already exists in this list.`);
-      setItemName('');
-      setShowSuggestions(false);
-      return;
-    }
-
-    // Check tier limits before adding item
-    const tierCheck = await canAddItem();
-    if (!tierCheck.canAdd) {
-      setUpgradeMessage(tierCheck.message);
-      setShowUpgradePrompt(true);
-      return;
-    }
-
-    const needsAI = !selectedSuggestion;
-
-    if (needsAI) {
-      const creditCheck = await checkCreditsAvailable('fast_add_ai');
-      if (!creditCheck.hasCredits) {
-        alert(`Insufficient credits for Fast Add with AI. Need ${creditCheck.creditsNeeded} but only have ${creditCheck.creditsAvailable}. Go to Settings to view your credits.`);
-        return;
-      }
-    }
-
+    // Show loading state IMMEDIATELY for instant feedback
     setIsFastAdding(true);
-    setCurrentStatus('Processing...');
-    let detectedCategory = 'Other';
-    let photoUrl = '';
+    setCurrentStatus('Checking...');
 
     try {
+      // Check for duplicate item in the list (use passed prop - instant, no API call)
+      const normalizedName = itemName.toLowerCase().trim();
+      const duplicate = existingItems.find(item => 
+        item.name.toLowerCase().trim() === normalizedName
+      );
+      
+      if (duplicate) {
+        alert(`An item named "${itemName}" already exists in this list.`);
+        setItemName('');
+        setShowSuggestions(false);
+        setIsFastAdding(false);
+        setCurrentStatus('');
+        return;
+      }
+
+      // Check tier limits before adding item (use cache for fast response)
+      const tierCheck = await canAddItem(true);
+      if (!tierCheck.canAdd) {
+        setUpgradeMessage(tierCheck.message);
+        setShowUpgradePrompt(true);
+        setIsFastAdding(false);
+        setCurrentStatus('');
+        return;
+      }
+
+      const needsAI = !selectedSuggestion;
+
+      if (needsAI) {
+        const creditCheck = await checkCreditsAvailable('fast_add_ai');
+        if (!creditCheck.hasCredits) {
+          alert(`Insufficient credits for Fast Add with AI. Need ${creditCheck.creditsNeeded} but only have ${creditCheck.creditsAvailable}. Go to Settings to view your credits.`);
+          setIsFastAdding(false);
+          setCurrentStatus('');
+          return;
+        }
+      }
+
+      setCurrentStatus('Processing...');
+      let detectedCategory = 'Other';
+      let photoUrl = '';
+
       const currentUser = await User.me();
 
       const { name: cleanName, quantity: extractedQty } = extractQuantityFromName(itemName);

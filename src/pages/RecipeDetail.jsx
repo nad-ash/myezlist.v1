@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { User, Recipe, RecipeFavorite, ShoppingList, ListMember, Item, ActivityTracking, CommonItem } from "@/api/entities";
 import { updateStatCount } from "@/api/functions";
 import { trackRecipe, trackRecipeFavorite } from "@/utils/trackingContext";
+import { useToast } from "@/components/ui/use-toast";
 import { InvokeLLM, GenerateImage, UploadFile, AI_USE_CASES } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,6 +57,7 @@ import { canCreateCustomRecipe } from "@/components/utils/tierManager";
 export default function RecipeDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
   const [recipe, setRecipe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -647,8 +649,12 @@ export default function RecipeDetailPage() {
     try {
       const currentUser = await User.me();
       if (!currentUser) {
-        // Handle case where user is not logged in, e.g., redirect or show message
-        alert("Please log in to access shopping lists.");
+        // Handle case where user is not logged in
+        toast({
+          title: "Login Required",
+          description: "Please log in to access shopping lists.",
+          variant: "destructive",
+        });
         return;
       }
       setUser(currentUser); // Ensure user state is set
@@ -670,7 +676,11 @@ export default function RecipeDetailPage() {
       }
     } catch (error) {
       console.error("Error loading lists:", error);
-      alert("Failed to load shopping lists. Please try again.");
+      toast({
+        title: "Loading Failed",
+        description: "Failed to load shopping lists. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -682,7 +692,10 @@ export default function RecipeDetailPage() {
       return;
     }
     if (!recipe.ingredients || recipe.ingredients.length === 0) {
-      alert('No ingredients to add.');
+      toast({
+        title: "No Ingredients",
+        description: "This recipe has no ingredients to add.",
+      });
       return;
     }
 
@@ -796,7 +809,11 @@ Return JSON with an array of objects, each containing:
       await loadUserLists();
     } catch (error) {
       console.error("Error extracting ingredients:", error);
-      alert("Failed to process ingredients. Please try again.");
+      toast({
+        title: "Processing Failed",
+        description: "Failed to process ingredients. Please try again.",
+        variant: "destructive",
+      });
       setShowAddToListDialog(false);
     }
     
@@ -834,22 +851,38 @@ Return JSON with an array of objects, each containing:
 
   const handleImportSelectedItems = async () => {
     if (selectedItemIds.length === 0) {
-      alert('Please select at least one ingredient.');
+      toast({
+        title: "No Selection",
+        description: "Please select at least one ingredient.",
+        variant: "destructive",
+      });
       return;
     }
 
     if (selectedItemIds.length > 25) {
-      alert('Maximum 25 ingredients allowed per import. Please select fewer items and try again.');
+      toast({
+        title: "Too Many Items",
+        description: "Maximum 25 ingredients allowed per import. Please select fewer items.",
+        variant: "destructive",
+      });
       return;
     }
 
     if (!createNewList && !importTargetListId) {
-      alert('Please select a list or create a new one.');
+      toast({
+        title: "No List Selected",
+        description: "Please select a list or create a new one.",
+        variant: "destructive",
+      });
       return;
     }
 
     if (createNewList && !newListName.trim()) {
-      alert('Please enter a name for the new list.');
+      toast({
+        title: "List Name Required",
+        description: "Please enter a name for the new list.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -1060,14 +1093,23 @@ Return JSON with an array of objects, each containing:
       setImporting(false);
       setShowAddToListDialog(false);
 
-      // Show success message
-      alert(`Successfully added ${itemsToImport.length} ingredients to ${listName}!`);
+      // Show success message with themed toast
+      toast({
+        title: "Ingredients Added! 🛒",
+        description: `Successfully added ${itemsToImport.length} ingredients to ${listName}`,
+        duration: 4000,
+      });
 
       // Navigate to the list view page
       navigate(createPageUrl(`ListView?listId=${targetListId}`));
     } catch (error) {
       console.error("Error importing ingredients:", error);
-      alert("Failed to add ingredients. Please try again.");
+      toast({
+        title: "Failed to Add Ingredients",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+        duration: 5000,
+      });
       setImporting(false);
     }
   };

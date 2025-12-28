@@ -3,8 +3,7 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { ShoppingCart, BarChart3, Settings, LogOut, CheckCircle2, Utensils, ListChecks, Home } from "lucide-react";
-import { User, AUTH_PROVIDER } from "@/api/entities";
-import { clearBase44Session } from "@/api/base44Link";
+import { User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -190,9 +189,6 @@ export default function Layout({ children, currentPageName }) {
     
     // Clear all app cache first
     appCache.clearAll();
-    
-    // Clear Base44 session if using hybrid auth
-    clearBase44Session();
     
     // Clear localStorage and sessionStorage
     try {
