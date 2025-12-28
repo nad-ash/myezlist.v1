@@ -20,6 +20,7 @@ import { supabase } from "@/api/supabaseClient";
 import { logger } from "@/utils/logger";
 
 import ItemCard from "../components/items/ItemCard";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 
 // Predefined category order for consistent display
 const CATEGORY_ORDER = [
@@ -51,6 +52,7 @@ export default function ShoppingModeActivePage() {
     return localStorage.getItem('shopping-mode-view') || 'default';
   });
   const [referrerPage, setReferrerPage] = useState("ShoppingMode");
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
 
   useEffect(() => {
     // Check if there's a referrer in URL params
@@ -324,45 +326,47 @@ export default function ShoppingModeActivePage() {
     }
   };
 
-  const handleCompleteShopping = async () => {
-    if (confirm("Mark all remaining items as checked?")) {
-      try {
-        const uncheckedItems = items.filter(item => !item.is_checked);
-        
-        const now = new Date().toISOString();
-        
-        // Update UI immediately
-        setItems(prev => prev.map(item => 
-          !item.is_checked ? { ...item, is_checked: true, checked_date: now } : item
-        ));
-        
-        // Make API calls in background
-        await Promise.all(uncheckedItems.map(item =>
-          Item.update(item.id, {
-            is_checked: true,
-            checked_date: now,
-          })
-        ));
-        
-        // Track activity for completing all items using standardized operation
-        if (user) {
-          ActivityTracking.create({
-            operation_type: 'UPDATE',
-            page: PAGES.SHOPPING_MODE,
-            operation_name: OPERATIONS.ITEM.COMPLETE_ALL_SHOPPING,
-            description: `User completed shopping for list "${selectedList?.name}" by checking all remaining items`,
-            user_id: user.id,
-            timestamp: new Date().toISOString()
-          }).catch(err => console.warn('Activity tracking failed:', err));
-        }
+  const handleCompleteShopping = () => {
+    setShowCompleteConfirm(true);
+  };
 
-        // ✅ Invalidate cache since items changed
-        logger.cache('ShoppingModeActive', 'Clearing cache (all items checked)');
-        appCache.clearShoppingList(selectedListId);
-      } catch (error) {
-        console.error("Error completing shopping:", error);
-        loadItems(); // Reload on error
+  const confirmCompleteShopping = async () => {
+    try {
+      const uncheckedItems = items.filter(item => !item.is_checked);
+      
+      const now = new Date().toISOString();
+      
+      // Update UI immediately
+      setItems(prev => prev.map(item => 
+        !item.is_checked ? { ...item, is_checked: true, checked_date: now } : item
+      ));
+      
+      // Make API calls in background
+      await Promise.all(uncheckedItems.map(item =>
+        Item.update(item.id, {
+          is_checked: true,
+          checked_date: now,
+        })
+      ));
+      
+      // Track activity for completing all items using standardized operation
+      if (user) {
+        ActivityTracking.create({
+          operation_type: 'UPDATE',
+          page: PAGES.SHOPPING_MODE,
+          operation_name: OPERATIONS.ITEM.COMPLETE_ALL_SHOPPING,
+          description: `User completed shopping for list "${selectedList?.name}" by checking all remaining items`,
+          user_id: user.id,
+          timestamp: new Date().toISOString()
+        }).catch(err => console.warn('Activity tracking failed:', err));
       }
+
+      // ✅ Invalidate cache since items changed
+      logger.cache('ShoppingModeActive', 'Clearing cache (all items checked)');
+      appCache.clearShoppingList(selectedListId);
+    } catch (error) {
+      console.error("Error completing shopping:", error);
+      loadItems(); // Reload on error
     }
   };
 
@@ -642,6 +646,17 @@ export default function ShoppingModeActivePage() {
           )}
         </div>
       </div>
+
+      {/* Complete Shopping Confirmation Dialog */}
+      <ConfirmDialog
+        open={showCompleteConfirm}
+        onOpenChange={setShowCompleteConfirm}
+        title="Complete Shopping"
+        description="Mark all remaining items as completed?"
+        confirmText="Complete All"
+        cancelText="Cancel"
+        onConfirm={confirmCompleteShopping}
+      />
     </div>
   );
 }
