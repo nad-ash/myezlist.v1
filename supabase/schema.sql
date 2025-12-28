@@ -662,5 +662,15 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION public.get_activity_stats(TIMESTAMPTZ) TO authenticated;
 
 -- ===========================================
+-- REALTIME: Enable realtime for items table
+-- This allows the app to receive live updates when items are modified
+-- (e.g., when background image generation completes)
+-- ===========================================
+
+-- Add items table to the supabase_realtime publication
+-- Note: Run this in Supabase Dashboard > SQL Editor if not already enabled
+ALTER PUBLICATION supabase_realtime ADD TABLE public.items;
+
+-- ===========================================
 -- COMPLETE!
 -- ===========================================

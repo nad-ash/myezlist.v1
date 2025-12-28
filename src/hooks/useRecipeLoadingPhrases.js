@@ -40,6 +40,26 @@ const LOADING_PHRASES = {
     "🗃️ Filing away deliciousness...",
     "✅ Almost ready to cook...",
     "🎉 Preparing your recipe card...",
+  ],
+  ingredients: [
+    "🥕 Reading through your ingredient list...",
+    "🔍 Identifying each ingredient...",
+    "📋 Organizing your shopping items...",
+    "🏪 Sorting by grocery aisle...",
+    "🧠 Our AI is learning your ingredients...",
+    "✂️ Separating quantities from items...",
+    "🏷️ Categorizing for easy shopping...",
+    "🛒 Preparing your shopping cart...",
+    "📊 Analyzing ingredient categories...",
+    "🌽 Fresh produce? Dairy? We're figuring it out...",
+    "🧮 Counting and measuring ingredients...",
+    "🎯 Finding the perfect category match...",
+    "💡 Making your grocery run easier...",
+    "📱 Almost ready for your list...",
+    "🛍️ Getting everything organized...",
+    "🤖 AI magic in progress...",
+    "⏳ Good things take a little time...",
+    "🌟 Creating your perfect shopping list...",
   ]
 };
 

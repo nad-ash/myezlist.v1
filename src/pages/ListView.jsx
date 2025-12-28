@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { User, ListMember, ShoppingList, Item, ActivityTracking, ShareLink } from "@/api/entities";
 import { updateStatCount } from "@/api/functions";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { appCache } from "@/components/utils/appCache";
 import { trackItem, trackShoppingList, trackShare, PAGES, OPERATIONS } from "@/utils/trackingContext";
+import { supabase } from "@/api/supabaseClient";
 
 import ItemCard from "../components/items/ItemCard";
 
@@ -68,6 +69,107 @@ export default function ListViewPage() {
       setError("No list ID provided");
     }
   }, [listId]);
+
+  // Helper to update cache with new items data (defined before the realtime effect that uses it)
+  const updateCacheWithItems = useCallback((updatedItems) => {
+    if (!listId || !list) return;
+    
+    const activeItems = updatedItems.filter((item) => !item.is_checked);
+    const checkedItems = updatedItems.filter((item) => item.is_checked);
+    
+    appCache.setShoppingList(listId, {
+      list: list,
+      items: updatedItems,
+      itemCounts: {
+        total: activeItems.length,
+        checked: checkedItems.length
+      },
+      timestamp: Date.now()
+    });
+    console.log(`📡 ListView: Cache updated with ${updatedItems.length} items`);
+  }, [listId, list]);
+
+  // Supabase Realtime subscription for live item updates (e.g., when images are generated in background)
+  useEffect(() => {
+    if (!listId) return;
+
+    console.log(`📡 ListView: Setting up realtime subscription for list ${listId}`);
+    
+    const channel = supabase
+      .channel(`list-items-${listId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'items',
+          filter: `list_id=eq.${listId}`
+        },
+        (payload) => {
+          console.log(`📡 ListView: Received realtime update for item ${payload.new.id}`, payload.new);
+          // Update the specific item in state without full reload
+          setItems(prevItems => {
+            const updatedItems = prevItems.map(item => 
+              item.id === payload.new.id 
+                ? { ...item, ...payload.new }
+                : item
+            );
+            // Also update the cache so other pages see the updated data
+            updateCacheWithItems(updatedItems);
+            return updatedItems;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'items',
+          filter: `list_id=eq.${listId}`
+        },
+        (payload) => {
+          console.log(`📡 ListView: Received realtime INSERT for item ${payload.new.id}`);
+          // Add new item to state if not already present
+          setItems(prevItems => {
+            const exists = prevItems.some(item => item.id === payload.new.id);
+            if (exists) return prevItems;
+            const updatedItems = [payload.new, ...prevItems];
+            // Also update the cache so other pages see the new item
+            updateCacheWithItems(updatedItems);
+            return updatedItems;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'items',
+          filter: `list_id=eq.${listId}`
+        },
+        (payload) => {
+          console.log(`📡 ListView: Received realtime DELETE for item ${payload.old.id}`);
+          // Remove the deleted item from state
+          setItems(prevItems => {
+            const updatedItems = prevItems.filter(item => item.id !== payload.old.id);
+            // Also update the cache so other pages see the deletion
+            updateCacheWithItems(updatedItems);
+            return updatedItems;
+          });
+        }
+      )
+      .subscribe((status) => {
+        console.log(`📡 ListView: Realtime subscription status: ${status}`);
+      });
+
+    // Cleanup subscription on unmount or listId change
+    return () => {
+      console.log(`📡 ListView: Cleaning up realtime subscription for list ${listId}`);
+      supabase.removeChannel(channel);
+    };
+  }, [listId, updateCacheWithItems]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

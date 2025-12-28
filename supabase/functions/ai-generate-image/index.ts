@@ -6,15 +6,20 @@
  * API keys are stored as Supabase secrets, never exposed to the client.
  * Images are uploaded to Supabase Storage and permanent URLs are returned.
  * 
- * Input: { prompt: string }
+ * Input: { prompt: string, quality?: 'low' | 'medium' | 'high' }
  * Output: { url: string } - Supabase Storage URL
+ * 
+ * Quality parameter:
+ * - 'low': Fast generation, suitable for item/product images
+ * - 'medium': Balanced quality, good for most use cases (default)
+ * - 'high': Best quality, suitable for hero/feature images
  * 
  * Required Supabase Secrets:
  * - AI_PROVIDER: 'openai' or 'gemini'
  * - OPENAI_API_KEY: OpenAI API key
  * - GEMINI_API_KEY: Google Gemini API key
  * - OPENAI_MODEL_IMAGE: Image model (default: gpt-image-1-mini)
- * - OPENAI_IMAGE_QUALITY: Image quality for GPT Image models (low, medium, high)
+ * - OPENAI_IMAGE_QUALITY: Default image quality (can be overridden by request)
  * - GEMINI_MODEL_IMAGE: Gemini image model (default: gemini-2.5-flash-image)
  */
 
@@ -90,7 +95,8 @@ async function uploadToStorage(
 // ===========================================
 async function generateImage_OpenAI(
   prompt: string,
-  supabaseClient: ReturnType<typeof createClient>
+  supabaseClient: ReturnType<typeof createClient>,
+  quality?: string
 ): Promise<{ url: string }> {
   if (!OPENAI_API_KEY) {
     throw new Error("OpenAI API key not configured. Set OPENAI_API_KEY in Supabase secrets.");
@@ -99,8 +105,11 @@ async function generateImage_OpenAI(
   const imageModel = OPENAI_IMAGE_MODEL;
   const isGptImage = imageModel.startsWith("gpt-image");
   const isDallE3 = imageModel === "dall-e-3";
+  
+  // Use provided quality, fallback to env var, then default to 'medium'
+  const effectiveQuality = quality || OPENAI_IMAGE_QUALITY;
 
-  console.log(`📷 OpenAI: Generating image with model "${imageModel}" (quality: ${isGptImage ? OPENAI_IMAGE_QUALITY : "standard"})`);
+  console.log(`📷 OpenAI: Generating image with model "${imageModel}" (quality: ${isGptImage ? effectiveQuality : "standard"})`);
 
   // Build request body based on model type
   const requestBody: Record<string, unknown> = {
@@ -111,7 +120,7 @@ async function generateImage_OpenAI(
 
   if (isGptImage) {
     // GPT Image models (gpt-image-1, gpt-image-1-mini)
-    requestBody.quality = OPENAI_IMAGE_QUALITY; // low, medium, high
+    requestBody.quality = effectiveQuality; // low, medium, high
     requestBody.size = "1024x1024";
   } else if (isDallE3) {
     // DALL-E 3
@@ -269,7 +278,7 @@ serve(async (req) => {
     console.log(`📷 AI Image request from user: ${user.id}`);
 
     // Parse request body
-    const { prompt } = await req.json();
+    const { prompt, quality } = await req.json();
 
     if (!prompt) {
       return new Response(
@@ -278,14 +287,14 @@ serve(async (req) => {
       );
     }
 
-    console.log(`🎨 Provider: ${AI_PROVIDER}, Prompt length: ${prompt.length}`);
+    console.log(`🎨 Provider: ${AI_PROVIDER}, Quality: ${quality || 'default'}, Prompt length: ${prompt.length}`);
 
     // Call the appropriate provider
     let result;
     if (AI_PROVIDER === "gemini") {
       result = await generateImage_Gemini(prompt, supabaseClient);
     } else {
-      result = await generateImage_OpenAI(prompt, supabaseClient);
+      result = await generateImage_OpenAI(prompt, supabaseClient, quality);
     }
 
     console.log(`✅ Image generated and uploaded successfully`);
