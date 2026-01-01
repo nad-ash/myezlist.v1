@@ -40,6 +40,28 @@ function escapeHtml(text) {
     .replace(/'/g, '&#039;');
 }
 
+// Escape string for safe insertion into JavaScript string literals inside <script> tags
+// Prevents XSS via: </script> tag injection, backslash escaping, quote escaping, newlines
+function escapeJsString(text) {
+  if (!text) return '';
+  return text
+    // Escape backslashes first (must be before other escapes that use backslash)
+    .replace(/\\/g, '\\\\')
+    // Escape double quotes
+    .replace(/"/g, '\\"')
+    // Escape single quotes (for safety)
+    .replace(/'/g, "\\'")
+    // Escape newlines and carriage returns
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    // Escape </script> - break up the closing tag to prevent premature script termination
+    // Uses Unicode escape for the forward slash
+    .replace(/<\//g, '<\\/')
+    // Escape JavaScript line terminators (U+2028 and U+2029)
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 export default async function handler(req, res) {
   const { id, from } = req.query;
   const userAgent = req.headers['user-agent'] || '';
@@ -150,7 +172,7 @@ export default async function handler(req, res) {
     <p><a href="${escapeHtml(recipeUrl)}">Click here if not redirected</a></p>
   </div>
   <script>
-    window.location.href = "${recipeUrl.replace(/"/g, '\\"')}";
+    window.location.href = "${escapeJsString(recipeUrl)}";
   </script>
 </body>
 </html>`;
