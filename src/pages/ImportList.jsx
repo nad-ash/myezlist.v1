@@ -503,7 +503,7 @@ export default function ImportListPage() {
           // Prepare list for LLM prompt, using only items that need categorization
           const itemsList = itemsNeedingAICategorization.map((item, idx) => `${idx + 1}. ${item.name}`).join('\n');
           
-          logger.import(`Items to categorize: ${itemsList.length} items`);
+          logger.import(`Items to categorize: ${itemsNeedingAICategorization.length} items`);
           
           const categoryResponse = await InvokeLLM({
           prompt: `Given the following grocery/household items, classify each into one of these categories: ${categories.join(", ")}.
