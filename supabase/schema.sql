@@ -452,6 +452,20 @@ CREATE POLICY "List owners can manage members" ON public.list_members
        FROM public.shopping_lists
       WHERE (shopping_lists.owner_id = auth.uid()))));
 
+-- Allow users to request membership via share links
+-- Users can only create membership for themselves, as 'member' role with 'pending' status,
+-- and only if there's an active share link for the list
+CREATE POLICY "Users can request to join via share link" ON public.list_members 
+    FOR INSERT WITH CHECK (
+        user_id = auth.uid()
+        AND role = 'member'
+        AND status = 'pending'
+        AND list_id IN (
+            SELECT list_id FROM public.share_links 
+            WHERE is_active = true
+        )
+    );
+
 CREATE POLICY "List owners can remove members" ON public.list_members 
     FOR DELETE USING (((list_id IN ( SELECT shopping_lists.id
        FROM public.shopping_lists

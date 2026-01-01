@@ -1,10 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL,
-  process.env.VITE_SUPABASE_ANON_KEY
-);
+// Get Supabase credentials from environment
+// Support both VITE_ prefixed (for consistency with frontend) and non-prefixed (standard server-side)
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+// Validate required environment variables
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('Missing Supabase environment variables. Required: SUPABASE_URL and SUPABASE_ANON_KEY (or VITE_ prefixed variants)');
+}
+
+// Initialize Supabase client (lazy - will fail gracefully if env vars missing)
+const supabase = SUPABASE_URL && SUPABASE_ANON_KEY 
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
 
 // Social media crawler User-Agent patterns
 const CRAWLER_PATTERNS = [
@@ -81,6 +90,12 @@ export default async function handler(req, res) {
   
   // For crawlers, fetch recipe data and return HTML with OG tags
   try {
+    // If Supabase client is not configured, redirect to app (graceful degradation)
+    if (!supabase) {
+      console.error('Supabase client not initialized - env vars missing');
+      return res.redirect(302, recipeUrl);
+    }
+
     const { data: recipe, error } = await supabase
       .from('recipes')
       .select('id, full_title, photo_url, cooking_time, servings, cuisine, calories_per_serving')
