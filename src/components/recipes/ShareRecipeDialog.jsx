@@ -29,10 +29,14 @@ const PinterestIcon = ({ className }) => (
 
 export default function ShareRecipeDialog({ open, onOpenChange, recipe, onShare }) {
   const [copied, setCopied] = useState(false);
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+  
+  // Use the short share URL format that goes through our API for proper OG tags
+  // This URL will serve dynamic meta tags for social crawlers, then redirect users to the SPA
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const shareUrl = recipe?.id ? `${baseUrl}/r/${recipe.id}` : (typeof window !== 'undefined' ? window.location.href : '');
   
   const shareTitle = recipe?.full_title || 'Check out this recipe';
-  const shareText = `🍽️ ${shareTitle} - Check out this delicious recipe on MyEZList!`;
+  const shareText = `${shareTitle} - Check out this delicious recipe on MyEZList!`;
   const shareImage = recipe?.photo_url || '';
 
   // Copy link to clipboard
@@ -76,14 +80,24 @@ export default function ShareRecipeDialog({ open, onOpenChange, recipe, onShare 
     }
   };
 
-  // WhatsApp share
+  // WhatsApp share - cleaner format without raw image URL
   const handleWhatsAppShare = () => {
-    let message = `🍽️ *${shareTitle}*\n\n`;
-    if (shareImage) {
-      message += `📸 ${shareImage}\n\n`;
+    // Build a clean, engaging message
+    // Note: WhatsApp will auto-generate a link preview with image from Open Graph tags
+    let message = `*${shareTitle}*\n\n`;
+    
+    // Add recipe details if available
+    const details = [];
+    if (recipe?.cooking_time) details.push(`Time: ${recipe.cooking_time}`);
+    if (recipe?.servings) details.push(`Servings: ${recipe.servings}`);
+    if (recipe?.cuisine) details.push(`Cuisine: ${recipe.cuisine}`);
+    
+    if (details.length > 0) {
+      message += details.join(' | ') + '\n\n';
     }
-    message += `Check out this delicious recipe on MyEZList! 👨‍🍳✨\n\n`;
-    message += `View full recipe: ${shareUrl}`;
+    
+    message += `I found this delicious recipe and thought you'd love it!\n\n`;
+    message += `${shareUrl}`;
     
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
     onShare?.('whatsapp');
@@ -101,7 +115,11 @@ export default function ShareRecipeDialog({ open, onOpenChange, recipe, onShare 
 
   // Twitter/X share
   const handleTwitterShare = () => {
-    const tweetText = `🍽️ ${shareTitle}\n\nCheck out this delicious recipe on MyEZList! 👨‍🍳`;
+    // Build tweet with recipe details
+    let tweetText = `${shareTitle}`;
+    if (recipe?.cuisine) tweetText += ` (${recipe.cuisine})`;
+    tweetText += `\n\nFound this amazing recipe on @MyEZList!`;
+    
     window.open(
       `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`,
       '_blank',
@@ -119,8 +137,26 @@ export default function ShareRecipeDialog({ open, onOpenChange, recipe, onShare 
 
   // Email share
   const handleEmailShare = () => {
-    const subject = `Recipe: ${shareTitle}`;
-    const body = `Hey!\n\nI found this amazing recipe and thought you'd love it:\n\n🍽️ ${shareTitle}\n\n${shareUrl}\n\nEnjoy cooking! 👨‍🍳`;
+    const subject = `Check out this recipe: ${shareTitle}`;
+    
+    // Build a detailed email body
+    let body = `Hey!\n\nI found this amazing recipe and thought you'd love it:\n\n`;
+    body += `${shareTitle}\n`;
+    
+    // Add recipe details
+    const details = [];
+    if (recipe?.cooking_time) details.push(`Cooking Time: ${recipe.cooking_time}`);
+    if (recipe?.servings) details.push(`Servings: ${recipe.servings}`);
+    if (recipe?.cuisine) details.push(`Cuisine: ${recipe.cuisine}`);
+    if (recipe?.calories_per_serving) details.push(`Calories: ${recipe.calories_per_serving}`);
+    
+    if (details.length > 0) {
+      body += details.join('\n') + '\n';
+    }
+    
+    body += `\nView the full recipe here:\n${shareUrl}\n\n`;
+    body += `Happy cooking!`;
+    
     window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     onShare?.('email');
   };
@@ -183,14 +219,14 @@ export default function ShareRecipeDialog({ open, onOpenChange, recipe, onShare 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md !bg-white dark:!bg-slate-900 dark:!border-slate-700">
+      <DialogContent className="sm:max-w-md !bg-white dark:!bg-slate-900 dark:!border-slate-700 overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 !text-slate-800 dark:!text-white">
             <Share2 className="w-5 h-5" />
             Share Recipe
           </DialogTitle>
-          <DialogDescription className="!text-slate-600 dark:!text-slate-400">
-            Share "{recipe?.full_title}" with friends and family
+          <DialogDescription className="!text-slate-600 dark:!text-slate-400 break-words">
+            Share "<span className="font-medium break-all">{recipe?.full_title}</span>" with friends and family
           </DialogDescription>
         </DialogHeader>
 

@@ -12,6 +12,7 @@ import { appCache } from "@/components/utils/appCache";
 import { incrementUsage } from "@/components/utils/usageSync";
 import { canAddItem } from "@/components/utils/tierManager";
 import UpgradePrompt from "@/components/common/UpgradePrompt";
+import { logger } from "@/utils/logger";
 
 const categories = [
   "Produce",
@@ -335,7 +336,7 @@ export default function FastAddItemInput({ listId, existingItems = [], onItemAdd
       await updateStatCount('total_items', 1);
 
       // CRITICAL FIX: Clear cache for this specific list so ListView will reload fresh data
-      console.log(`🗑️ FastAddItemInput: Clearing cache for list ${listId} (item added via quick add)`);
+      logger.cache('FastAddItemInput', 'Clearing cache (item added via quick add)');
       appCache.clearShoppingList(listId);
 
       setItemName('');

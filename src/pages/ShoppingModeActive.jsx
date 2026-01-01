@@ -17,8 +17,10 @@ import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import { appCache } from "@/components/utils/appCache";
 import { supabase } from "@/api/supabaseClient";
+import { logger } from "@/utils/logger";
 
 import ItemCard from "../components/items/ItemCard";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 
 // Predefined category order for consistent display
 const CATEGORY_ORDER = [
@@ -50,6 +52,7 @@ export default function ShoppingModeActivePage() {
     return localStorage.getItem('shopping-mode-view') || 'default';
   });
   const [referrerPage, setReferrerPage] = useState("ShoppingMode");
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
 
   useEffect(() => {
     // Check if there's a referrer in URL params
@@ -98,14 +101,14 @@ export default function ShoppingModeActivePage() {
       },
       timestamp: Date.now()
     });
-    console.log(`📡 ShoppingModeActive: Cache updated with ${updatedItems.length} items`);
+    logger.realtime('ShoppingModeActive', `Cache updated with ${updatedItems.length} items`);
   }, [selectedListId, lists]);
 
   // Supabase Realtime subscription for live item updates (e.g., when images are generated in background)
   useEffect(() => {
     if (!selectedListId) return;
 
-    console.log(`📡 ShoppingModeActive: Setting up realtime subscription for list ${selectedListId}`);
+    logger.realtime('ShoppingModeActive', 'Setting up realtime subscription');
     
     const channel = supabase
       .channel(`shopping-mode-items-${selectedListId}`)
@@ -118,7 +121,7 @@ export default function ShoppingModeActivePage() {
           filter: `list_id=eq.${selectedListId}`
         },
         (payload) => {
-          console.log(`📡 ShoppingModeActive: Received realtime update for item ${payload.new.id}`, payload.new);
+          logger.realtime('ShoppingModeActive', 'Received realtime update', payload.new.id, payload.new);
           // Update the specific item in state without full reload
           setItems(prevItems => {
             const updatedItems = prevItems.map(item => 
@@ -141,7 +144,7 @@ export default function ShoppingModeActivePage() {
           filter: `list_id=eq.${selectedListId}`
         },
         (payload) => {
-          console.log(`📡 ShoppingModeActive: Received realtime INSERT for item ${payload.new.id}`);
+          logger.realtime('ShoppingModeActive', 'Received realtime INSERT', payload.new.id);
           // Add new item to state if not already present
           setItems(prevItems => {
             const exists = prevItems.some(item => item.id === payload.new.id);
@@ -162,7 +165,7 @@ export default function ShoppingModeActivePage() {
           filter: `list_id=eq.${selectedListId}`
         },
         (payload) => {
-          console.log(`📡 ShoppingModeActive: Received realtime DELETE for item ${payload.old.id}`);
+          logger.realtime('ShoppingModeActive', 'Received realtime DELETE', payload.old.id);
           // Remove the deleted item from state
           setItems(prevItems => {
             const updatedItems = prevItems.filter(item => item.id !== payload.old.id);
@@ -173,12 +176,12 @@ export default function ShoppingModeActivePage() {
         }
       )
       .subscribe((status) => {
-        console.log(`📡 ShoppingModeActive: Realtime subscription status: ${status}`);
+        logger.realtime('ShoppingModeActive', `Subscription status: ${status}`);
       });
 
     // Cleanup subscription on unmount or selectedListId change
     return () => {
-      console.log(`📡 ShoppingModeActive: Cleaning up realtime subscription for list ${selectedListId}`);
+      logger.realtime('ShoppingModeActive', 'Cleaning up realtime subscription');
       supabase.removeChannel(channel);
     };
   }, [selectedListId, updateCacheWithItems]);
@@ -188,11 +191,11 @@ export default function ShoppingModeActivePage() {
       // ✅ Check cache first for user
       let currentUser = appCache.getUser();
       if (!currentUser) {
-        console.log('🔄 ShoppingModeActive: Fetching user from API (cache miss)');
+        logger.cache('ShoppingModeActive', 'Fetching user from API (cache miss)');
         currentUser = await User.me();
         appCache.setUser(currentUser);
       } else {
-        console.log('📦 ShoppingModeActive: Using cached user data');
+        logger.cache('ShoppingModeActive', 'Using cached user data');
       }
       setUser(currentUser);
 
@@ -200,11 +203,11 @@ export default function ShoppingModeActivePage() {
       let memberships = appCache.getListMemberships(currentUser.id);
       
       if (!memberships) {
-        console.log('🔄 ShoppingModeActive: Fetching ListMember from API (cache miss)');
+        logger.cache('ShoppingModeActive', 'Fetching ListMember from API (cache miss)');
         memberships = await ListMember.filter({ user_id: currentUser.id });
         appCache.setListMemberships(currentUser.id, memberships);
       } else {
-        console.log('📦 ShoppingModeActive: Using cached ListMember data');
+        logger.cache('ShoppingModeActive', 'Using cached ListMember data');
       }
       
       const approvedMemberships = memberships.filter(m => m.status === 'approved' || m.role === 'owner');
@@ -215,11 +218,11 @@ export default function ShoppingModeActivePage() {
         let allLists = appCache.getShoppingListEntities();
         
         if (!allLists) {
-          console.log('🔄 ShoppingModeActive: Fetching ShoppingList entities from API (cache miss)');
+          logger.cache('ShoppingModeActive', 'Fetching ShoppingList entities from API (cache miss)');
           allLists = await ShoppingList.list();
           appCache.setShoppingListEntities(allLists);
         } else {
-          console.log('📦 ShoppingModeActive: Using cached ShoppingList entities');
+          logger.cache('ShoppingModeActive', 'Using cached ShoppingList entities');
         }
         
         const userLists = allLists.filter(list => listIds.includes(list.id) && !list.archived);
@@ -247,10 +250,10 @@ export default function ShoppingModeActivePage() {
       const cachedList = appCache.getShoppingList(selectedListId);
       
       if (cachedList && cachedList.items) {
-        console.log(`📦 ShoppingModeActive: Using cached items for list ${selectedListId}`);
+        logger.cache('ShoppingModeActive', 'Using cached items for list');
         setItems(cachedList.items);
       } else {
-        console.log(`🔄 ShoppingModeActive: Fetching items for list ${selectedListId} from API (cache miss)`);
+        logger.cache('ShoppingModeActive', 'Fetching items from API (cache miss)');
         const itemsData = await Item.filter({ list_id: selectedListId }, "-created_date");
         setItems(itemsData);
         
@@ -279,7 +282,7 @@ export default function ShoppingModeActivePage() {
     setIsRefreshing(true);
     try {
       // Clear cache and reload
-      console.log('🔄 ShoppingModeActive: Manual refresh - clearing cache');
+      logger.cache('ShoppingModeActive', 'Manual refresh - clearing cache');
       appCache.clearShoppingList(selectedListId);
       await loadItems();
     } catch (error) {
@@ -312,7 +315,7 @@ export default function ShoppingModeActivePage() {
       await Item.update(item.id, updatedData, trackingContext);
 
       // ✅ Invalidate cache since item status changed
-      console.log(`🗑️ ShoppingModeActive: Clearing cache for list ${selectedListId} (item checked status changed)`);
+      logger.cache('ShoppingModeActive', 'Clearing cache (item checked status changed)');
       appCache.clearShoppingList(selectedListId);
     } catch (error) {
       console.error("Error updating item:", error);
@@ -323,45 +326,47 @@ export default function ShoppingModeActivePage() {
     }
   };
 
-  const handleCompleteShopping = async () => {
-    if (confirm("Mark all remaining items as checked?")) {
-      try {
-        const uncheckedItems = items.filter(item => !item.is_checked);
-        
-        const now = new Date().toISOString();
-        
-        // Update UI immediately
-        setItems(prev => prev.map(item => 
-          !item.is_checked ? { ...item, is_checked: true, checked_date: now } : item
-        ));
-        
-        // Make API calls in background
-        await Promise.all(uncheckedItems.map(item =>
-          Item.update(item.id, {
-            is_checked: true,
-            checked_date: now,
-          })
-        ));
-        
-        // Track activity for completing all items using standardized operation
-        if (user) {
-          ActivityTracking.create({
-            operation_type: 'UPDATE',
-            page: PAGES.SHOPPING_MODE,
-            operation_name: OPERATIONS.ITEM.COMPLETE_ALL_SHOPPING,
-            description: `User completed shopping for list "${selectedList?.name}" by checking all remaining items`,
-            user_id: user.id,
-            timestamp: new Date().toISOString()
-          }).catch(err => console.warn('Activity tracking failed:', err));
-        }
+  const handleCompleteShopping = () => {
+    setShowCompleteConfirm(true);
+  };
 
-        // ✅ Invalidate cache since items changed
-        console.log(`🗑️ ShoppingModeActive: Clearing cache for list ${selectedListId} (all items checked)`);
-        appCache.clearShoppingList(selectedListId);
-      } catch (error) {
-        console.error("Error completing shopping:", error);
-        loadItems(); // Reload on error
+  const confirmCompleteShopping = async () => {
+    try {
+      const uncheckedItems = items.filter(item => !item.is_checked);
+      
+      const now = new Date().toISOString();
+      
+      // Update UI immediately
+      setItems(prev => prev.map(item => 
+        !item.is_checked ? { ...item, is_checked: true, checked_date: now } : item
+      ));
+      
+      // Make API calls in background
+      await Promise.all(uncheckedItems.map(item =>
+        Item.update(item.id, {
+          is_checked: true,
+          checked_date: now,
+        })
+      ));
+      
+      // Track activity for completing all items using standardized operation
+      if (user) {
+        ActivityTracking.create({
+          operation_type: 'UPDATE',
+          page: PAGES.SHOPPING_MODE,
+          operation_name: OPERATIONS.ITEM.COMPLETE_ALL_SHOPPING,
+          description: `User completed shopping for list "${selectedList?.name}" by checking all remaining items`,
+          user_id: user.id,
+          timestamp: new Date().toISOString()
+        }).catch(err => console.warn('Activity tracking failed:', err));
       }
+
+      // ✅ Invalidate cache since items changed
+      logger.cache('ShoppingModeActive', 'Clearing cache (all items checked)');
+      appCache.clearShoppingList(selectedListId);
+    } catch (error) {
+      console.error("Error completing shopping:", error);
+      loadItems(); // Reload on error
     }
   };
 
@@ -641,6 +646,17 @@ export default function ShoppingModeActivePage() {
           )}
         </div>
       </div>
+
+      {/* Complete Shopping Confirmation Dialog */}
+      <ConfirmDialog
+        open={showCompleteConfirm}
+        onOpenChange={setShowCompleteConfirm}
+        title="Complete Shopping"
+        description="Mark all remaining items as completed?"
+        confirmText="Complete All"
+        cancelText="Cancel"
+        onConfirm={confirmCompleteShopping}
+      />
     </div>
   );
 }

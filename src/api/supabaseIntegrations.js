@@ -11,6 +11,7 @@
  */
 
 import { supabase } from './supabaseClient';
+import { logger } from '@/utils/logger';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -83,7 +84,7 @@ export const AI_USE_CASES = {
  */
 export async function InvokeLLM({ prompt, response_json_schema, useCase = 'default', temperature }) {
   try {
-    console.log(`🤖 Calling ai-invoke-llm Edge Function (useCase: ${useCase}, temp: ${temperature ?? 'default'})`);
+    logger.ai(`Calling LLM (useCase: ${useCase}, temp: ${temperature ?? 'default'})`);
     
     const body = {
       prompt,
@@ -98,7 +99,7 @@ export async function InvokeLLM({ prompt, response_json_schema, useCase = 'defau
     
     const result = await callEdgeFunction('ai-invoke-llm', body);
     
-    console.log(`✅ LLM response received`);
+    logger.success('LLM response received');
     return result;
   } catch (error) {
     console.error('InvokeLLM error:', error);
@@ -116,11 +117,11 @@ export async function InvokeLLM({ prompt, response_json_schema, useCase = 'defau
  */
 export async function GenerateImage({ prompt, quality = 'medium' }) {
   try {
-    console.log(`📷 Calling ai-generate-image Edge Function (quality: ${quality})`);
+    logger.ai(`Generating image (quality: ${quality})`);
     
     const result = await callEdgeFunction('ai-generate-image', { prompt, quality });
     
-    console.log(`✅ Image generated: ${result.url?.substring(0, 50)}...`);
+    logger.success('Image generated');
     return result;
   } catch (error) {
     console.error('GenerateImage error:', error);

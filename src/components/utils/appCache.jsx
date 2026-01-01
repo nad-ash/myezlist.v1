@@ -3,6 +3,8 @@
  * Implements configurable cache durations with automatic expiration
  */
 
+import { logger } from "@/utils/logger";
+
 const DEFAULT_CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 
 class AppCache {
@@ -212,8 +214,8 @@ class AppCache {
 
       // CRITICAL: Validate user ID if provided
       if (expectedUserId && data.id !== expectedUserId) {
-        console.log('⚠️ Cached user ID mismatch! Expected:', expectedUserId, 'Got:', data.id);
-        console.log('🗑️ Clearing stale user cache for different user');
+        logger.debug('⚠️ Cached user ID mismatch! Clearing stale cache.');
+        logger.cache('AppCache', 'Clearing stale user cache for different user');
         this.clearUser();
         return null;
       }
@@ -222,7 +224,7 @@ class AppCache {
       if (this.memoryCache.user) {
         // Also validate memory cache
         if (expectedUserId && this.memoryCache.user.id !== expectedUserId) {
-          console.log('⚠️ Memory cached user ID mismatch!');
+          logger.debug('⚠️ Memory cached user ID mismatch!');
           this.memoryCache.user = null;
           return null;
         }
@@ -255,7 +257,7 @@ class AppCache {
       };
       localStorage.setItem('app_cache_user', JSON.stringify(cacheData));
       this.memoryCache.user = userData;
-      console.log('✅ Cached user data for user ID:', userData.id);
+      logger.cache('AppCache', 'Cached user data');
     } catch (error) {
       console.error('Error setting user cache:', error);
     }
@@ -660,7 +662,7 @@ class AppCache {
   clearShoppingList(listId) {
     try {
       localStorage.removeItem(`app_cache_shopping_list_${listId}`);
-      console.log(`🗑️ Cleared cache for shopping list: ${listId}`);
+      logger.cache('AppCache', 'Cleared cache for shopping list');
     } catch (error) {
       console.error('Error clearing shopping list cache:', error);
     }

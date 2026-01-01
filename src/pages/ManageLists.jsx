@@ -15,6 +15,7 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { canCreateShoppingList, canAddItem } from "@/components/utils/tierManager";
 import UpgradePrompt from "@/components/common/UpgradePrompt";
 import { incrementUsage, decrementUsage } from "@/components/utils/usageSync";
+import { logger } from "@/utils/logger";
 
 export default function ManageListsPage() {
   const navigate = useNavigate();
@@ -34,7 +35,7 @@ export default function ManageListsPage() {
     // Check for hard refresh to ensure fresh data
     const perfEntries = performance.getEntriesByType('navigation');
     if (perfEntries.length > 0 && perfEntries[0].type === 'reload') {
-      console.log('🔄 ManageLists: Hard refresh detected - clearing caches');
+      logger.cache('ManageLists', 'Hard refresh detected - clearing caches');
       appCache.clearShoppingListEntities();
       appCache.clearAllShoppingLists();
       appCache.clearListMemberships();
@@ -56,17 +57,17 @@ export default function ManageListsPage() {
     try {
       let currentUser = appCache.getUser();
       if (!currentUser) {
-        console.log('🔄 ManageLists: Fetching user from API (cache miss)');
+        logger.cache('ManageLists', 'Fetching user from API (cache miss)');
         try {
           currentUser = await User.me();
           appCache.setUser(currentUser);
         } catch (e) {
-          console.log("User not authenticated, redirecting to Landing");
+          logger.debug("User not authenticated, redirecting to Landing");
           navigate(createPageUrl("Landing"));
           return;
         }
       } else {
-        console.log('📦 ManageLists: Using cached user data');
+        logger.cache('ManageLists', 'Using cached user data');
       }
       
       setUser(currentUser);
@@ -74,11 +75,11 @@ export default function ManageListsPage() {
       let allMemberships = appCache.getListMemberships(currentUser.id);
       
       if (!allMemberships) {
-        console.log('🔄 ManageLists: Fetching ListMember from API (cache miss)');
+        logger.cache('ManageLists', 'Fetching ListMember from API (cache miss)');
         allMemberships = await ListMember.filter({ user_id: currentUser.id });
         appCache.setListMemberships(currentUser.id, allMemberships);
       } else {
-        console.log('📦 ManageLists: Using cached ListMember data');
+        logger.cache('ManageLists', 'Using cached ListMember data');
       }
       
       const listIds = allMemberships
@@ -90,10 +91,10 @@ export default function ManageListsPage() {
         let allLists;
         
         if (cachedLists) {
-          console.log('📦 ManageLists: Using cached ShoppingList entities');
+          logger.cache('ManageLists', 'Using cached ShoppingList entities');
           allLists = cachedLists;
         } else {
-          console.log('🔄 ManageLists: Fetching ShoppingList entities from API (cache miss)');
+          logger.cache('ManageLists', 'Fetching ShoppingList entities from API (cache miss)');
           allLists = await ShoppingList.list();
           appCache.setShoppingListEntities(allLists);
         }
@@ -106,10 +107,10 @@ export default function ManageListsPage() {
           const cachedListData = appCache.getShoppingList(list.id);
           
           if (cachedListData && cachedListData.itemCounts) {
-            console.log(`📦 ManageLists: Using cached item counts for list ${list.id}`);
+            logger.cache('ManageLists', 'Using cached item counts for list');
             counts[list.id] = cachedListData.itemCounts;
           } else {
-            console.log(`🔄 ManageLists: Fetching items for list ${list.id} (cache miss)`);
+            logger.cache('ManageLists', 'Fetching items for list (cache miss)');
             const items = await Item.filter({ list_id: list.id });
             const activeItems = items.filter(item => !item.is_checked);
             const checkedItems = items.filter(item => item.is_checked);
@@ -184,7 +185,7 @@ export default function ManageListsPage() {
       // Update statistics - atomic increment total_lists (global)
       await updateStatCount('total_lists', 1);
 
-      console.log(`🗑️ ManageLists: Clearing caches (list created)`);
+      logger.cache('ManageLists', 'Clearing caches (list created)');
       appCache.clearShoppingListEntities();
       appCache.clearListMemberships(user.id);
       
@@ -243,7 +244,7 @@ export default function ManageListsPage() {
         appCache.clearUser();
       }
 
-      console.log(`🗑️ ManageLists: Clearing all related caches (list deleted)`);
+      logger.cache('ManageLists', 'Clearing all related caches (list deleted)');
       appCache.clearShoppingList(list.id);
       appCache.clearShoppingListEntities();
       appCache.clearListMemberships(user.id);
