@@ -231,8 +231,25 @@ export default function ShareDialog({ open, onClose, list, onShareLinkCreated })
               </div>
             ) : (
               <div className="text-center py-6 bg-slate-50 rounded-lg">
-                {isAtMemberLimit ? (
-                  // At member limit - show warning
+                {!isOwner ? (
+                  // Non-owner: Cannot see share links due to RLS security
+                  // Show appropriate message instead of misleading "no link exists"
+                  <>
+                    <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <Users className="w-6 h-6 text-slate-400" />
+                    </div>
+                    <p className="text-sm font-medium text-slate-800 mb-2">
+                      Share Link Management
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Only the list owner can view and manage share links.
+                    </p>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Contact the list owner if you need to invite someone.
+                    </p>
+                  </>
+                ) : isAtMemberLimit ? (
+                  // Owner at member limit - show warning
                   <>
                     <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <AlertCircle className="w-6 h-6 text-amber-600" />
@@ -248,7 +265,7 @@ export default function ShareDialog({ open, onClose, list, onShareLinkCreated })
                     </p>
                   </>
                 ) : (
-                  // Can generate share link
+                  // Owner can generate share link
                   <>
                     <LinkIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <p className="text-sm text-slate-600 mb-2">
@@ -259,7 +276,7 @@ export default function ShareDialog({ open, onClose, list, onShareLinkCreated })
                     </p>
                     <Button
                       onClick={handleGenerateLink}
-                      disabled={loading || !isOwner}
+                      disabled={loading}
                       className="bg-blue-600 hover:bg-blue-700"
                     >
                       {loading ? (
@@ -274,11 +291,6 @@ export default function ShareDialog({ open, onClose, list, onShareLinkCreated })
                         </>
                       )}
                     </Button>
-                    {!isOwner && (
-                      <p className="text-xs text-slate-500 mt-2">
-                        Only the list owner can generate share links.
-                      </p>
-                    )}
                   </>
                 )}
               </div>
