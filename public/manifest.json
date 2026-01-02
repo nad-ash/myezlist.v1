@@ -31,7 +31,7 @@
     },
     {
       "src": "/icons/MyEZList_Maskable.png",
-      "sizes": "512x512",
+      "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "maskable"
     }
@@ -149,42 +149,42 @@
     },
     {
       "src": "/screenshots/tablet/home-tablet.png",
-      "sizes": "1024x1366",
+      "sizes": "2048x2732",
       "type": "image/png",
       "form_factor": "wide",
       "label": "Home Dashboard - Tablet"
     },
     {
       "src": "/screenshots/tablet/shoppinglist-tablet.png",
-      "sizes": "1024x1366",
+      "sizes": "2048x2732",
       "type": "image/png",
       "form_factor": "wide",
       "label": "Shopping List - Tablet"
     },
     {
       "src": "/screenshots/tablet/shoppinglist-tablet-darkmode.png",
-      "sizes": "1024x1366",
+      "sizes": "2048x2732",
       "type": "image/png",
       "form_factor": "wide",
       "label": "Dark Mode - Tablet"
     },
     {
       "src": "/screenshots/tablet/tasks-tablet.png",
-      "sizes": "1024x1366",
+      "sizes": "2048x2732",
       "type": "image/png",
       "form_factor": "wide",
       "label": "Tasks - Tablet"
     },
     {
       "src": "/screenshots/tablet/recipe-tablet.png",
-      "sizes": "1024x1366",
+      "sizes": "2048x2732",
       "type": "image/png",
       "form_factor": "wide",
       "label": "Recipes - Tablet"
     },
     {
       "src": "/screenshots/tablet/recipe-cookingsteps-tablet.png",
-      "sizes": "1024x1366",
+      "sizes": "2048x2732",
       "type": "image/png",
       "form_factor": "wide",
       "label": "Cooking Steps - Tablet"
