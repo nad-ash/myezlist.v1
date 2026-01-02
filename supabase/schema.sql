@@ -452,19 +452,12 @@ CREATE POLICY "List owners can manage members" ON public.list_members
        FROM public.shopping_lists
       WHERE (shopping_lists.owner_id = auth.uid()))));
 
--- Allow users to request membership via share links
--- Users can only create membership for themselves, as 'member' role with 'pending' status,
--- and only if there's an active share link for the list
-CREATE POLICY "Users can request to join via share link" ON public.list_members 
-    FOR INSERT WITH CHECK (
-        user_id = auth.uid()
-        AND role = 'member'
-        AND status = 'pending'
-        AND list_id IN (
-            SELECT list_id FROM public.share_links 
-            WHERE is_active = true
-        )
-    );
+-- NOTE: Direct INSERT via share link is NOT allowed due to security concerns.
+-- Users must use the join_list_via_share_token() RPC function which validates the token server-side.
+-- The old "Users can request to join via share link" policy was removed because it only checked
+-- if a list had ANY active share link, not that the user possessed the actual token.
+-- An attacker could enumerate list_ids from share_links and create membership requests
+-- without having the actual share token.
 
 CREATE POLICY "List owners can remove members" ON public.list_members 
     FOR DELETE USING (((list_id IN ( SELECT shopping_lists.id
@@ -484,8 +477,15 @@ CREATE POLICY "Users can view members of their lists" ON public.list_members
 -- ===========================================
 -- RLS POLICIES: share_links
 -- ===========================================
-CREATE POLICY "Anyone can view share links" ON public.share_links 
-    FOR SELECT USING (true);
+-- NOTE: Share links are accessed via the secure join_list_via_share_token() function.
+-- Direct SELECT is restricted to list owners (for management) to prevent enumeration attacks.
+CREATE POLICY "List owners can view their share links" ON public.share_links 
+    FOR SELECT USING (
+        list_id IN (
+            SELECT id FROM public.shopping_lists 
+            WHERE owner_id = auth.uid()
+        )
+    );
 
 CREATE POLICY "Users can create share links for their lists" ON public.share_links 
     FOR INSERT WITH CHECK ((list_id IN ( SELECT shopping_lists.id
@@ -674,6 +674,143 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Grant execute permission to authenticated users (admins only via RLS)
 GRANT EXECUTE ON FUNCTION public.get_activity_stats(TIMESTAMPTZ) TO authenticated;
+
+-- ===========================================
+-- FUNCTION: Join List via Share Token (Secure)
+-- Validates the share token server-side and creates membership request
+-- This replaces direct INSERT into list_members for share link joins
+-- ===========================================
+CREATE OR REPLACE FUNCTION public.join_list_via_share_token(share_token TEXT)
+RETURNS JSON AS $$
+DECLARE
+  v_user_id UUID;
+  v_user_email TEXT;
+  v_share_link RECORD;
+  v_existing_membership RECORD;
+  v_list_name TEXT;
+  v_result JSON;
+BEGIN
+  -- Get the authenticated user
+  v_user_id := auth.uid();
+  IF v_user_id IS NULL THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'not_authenticated',
+      'message', 'You must be logged in to join a list'
+    );
+  END IF;
+  
+  -- Get user email from profiles
+  SELECT email INTO v_user_email 
+  FROM public.profiles 
+  WHERE id = v_user_id;
+  
+  -- Validate the share token exists and is active
+  SELECT sl.*, s.name as list_name 
+  INTO v_share_link
+  FROM public.share_links sl
+  JOIN public.shopping_lists s ON s.id = sl.list_id
+  WHERE sl.token = share_token 
+    AND sl.is_active = true
+    AND (sl.expires_at IS NULL OR sl.expires_at > NOW());
+  
+  IF v_share_link IS NULL THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'invalid_token',
+      'message', 'This share link is invalid or has expired'
+    );
+  END IF;
+  
+  v_list_name := v_share_link.list_name;
+  
+  -- Check if user is already a member
+  SELECT * INTO v_existing_membership
+  FROM public.list_members
+  WHERE list_id = v_share_link.list_id
+    AND user_id = v_user_id;
+  
+  IF v_existing_membership IS NOT NULL THEN
+    IF v_existing_membership.status = 'approved' THEN
+      RETURN json_build_object(
+        'success', true,
+        'status', 'already_approved',
+        'list_id', v_share_link.list_id,
+        'list_name', v_list_name,
+        'message', 'You already have access to this list'
+      );
+    ELSE
+      RETURN json_build_object(
+        'success', true,
+        'status', 'pending',
+        'list_id', v_share_link.list_id,
+        'list_name', v_list_name,
+        'message', 'Your request is pending approval'
+      );
+    END IF;
+  END IF;
+  
+  -- Create new membership request
+  INSERT INTO public.list_members (list_id, user_id, user_email, role, status)
+  VALUES (v_share_link.list_id, v_user_id, v_user_email, 'member', 'pending');
+  
+  RETURN json_build_object(
+    'success', true,
+    'status', 'pending',
+    'list_id', v_share_link.list_id,
+    'list_name', v_list_name,
+    'message', 'Access request sent! The owner will review your request.'
+  );
+  
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object(
+    'success', false,
+    'error', 'server_error',
+    'message', 'An error occurred. Please try again.'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION public.join_list_via_share_token(TEXT) TO authenticated;
+
+-- ===========================================
+-- FUNCTION: Validate Share Token (Public, read-only)
+-- Allows checking if a token is valid without creating membership
+-- Used for showing the "Sign in to join" UI to unauthenticated users
+-- ===========================================
+CREATE OR REPLACE FUNCTION public.validate_share_token(share_token TEXT)
+RETURNS JSON AS $$
+DECLARE
+  v_share_link RECORD;
+BEGIN
+  -- Check if token exists and is active (no auth required for validation)
+  SELECT sl.list_id, sl.is_active, sl.expires_at, s.name as list_name
+  INTO v_share_link
+  FROM public.share_links sl
+  JOIN public.shopping_lists s ON s.id = sl.list_id
+  WHERE sl.token = share_token 
+    AND sl.is_active = true
+    AND (sl.expires_at IS NULL OR sl.expires_at > NOW());
+  
+  IF v_share_link IS NULL THEN
+    RETURN json_build_object(
+      'valid', false,
+      'message', 'This share link is invalid or has expired'
+    );
+  END IF;
+  
+  -- Return limited info (don't expose list_id to unauthenticated users)
+  RETURN json_build_object(
+    'valid', true,
+    'list_name', v_share_link.list_name
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission to anonymous users (for pre-auth validation)
+GRANT EXECUTE ON FUNCTION public.validate_share_token(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION public.validate_share_token(TEXT) TO authenticated;
 
 -- ===========================================
 -- REALTIME: Enable realtime for items table

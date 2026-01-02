@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { ShareLink } from "@/api/entities";
-import { ShoppingList } from "@/api/entities";
-import { ListMember } from "@/api/entities";
 import { User, ActivityTracking } from "@/api/entities";
+import { joinListViaShareToken, validateShareToken } from "@/api/supabaseFunctions";
 import { OPERATIONS, PAGES } from "@/utils/trackingContext";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -43,16 +41,20 @@ export default function JoinListViaLink() {
         setIsAuthenticated(false);
         
         // Validate the share link exists before showing sign-in prompt
+        // Uses secure RPC function that doesn't expose list_id to unauthenticated users
         setMessage('Validating share link...');
-        const shareLinks = await ShareLink.filter({ token, is_active: true });
+        const validation = await validateShareToken(token);
         
-        if (shareLinks.length === 0) {
+        if (!validation.valid) {
           setStatus('error');
-          setMessage('This share link is invalid or has expired');
+          setMessage(validation.message || 'This share link is invalid or has expired');
           return;
         }
         
-        // Share link is valid, prompt user to sign in
+        // Share link is valid, show list name and prompt user to sign in
+        if (validation.list_name) {
+          setListName(validation.list_name);
+        }
         setStatus('need_auth');
         setMessage('Sign in to join this shopping list');
         return;
@@ -70,70 +72,28 @@ export default function JoinListViaLink() {
 
   const processJoin = async (currentUser) => {
     try {
-      setMessage('Validating share link...');
-      const shareLinks = await ShareLink.filter({ token, is_active: true });
-
-      if (shareLinks.length === 0) {
-        setStatus('error');
-        setMessage('This share link is invalid or has expired');
-        return;
-      }
-
-      const targetListId = shareLinks[0].list_id;
-
-      // Try to get list name (may fail due to RLS if user isn't a member yet)
-      setMessage('Loading list details...');
-      let listDisplayName = 'this shopping list';
-      try {
-        const allLists = await ShoppingList.list();
-        const list = allLists.find(l => l.id === targetListId);
-        if (list) {
-          listDisplayName = list.name;
-          setListName(list.name);
-        }
-      } catch (listError) {
-        // Can't see list details yet (RLS), that's okay - we'll still join
-        console.log('Cannot fetch list details (normal for new users)');
-      }
-
-      // Check if user is already a member
-      setMessage('Checking membership...');
-      const memberships = await ListMember.filter({
-        list_id: targetListId,
-        user_id: currentUser.id
-      });
-
-      if (memberships.length > 0) {
-        const membership = memberships[0];
-        
-        if (membership.status === 'approved') {
-          // User already has access - try to get list name now (should work with membership)
-          if (!listName) {
-            try {
-              const allLists = await ShoppingList.list();
-              const list = allLists.find(l => l.id === targetListId);
-              if (list) setListName(list.name);
-            } catch (e) { /* ignore */ }
-          }
-          setStatus('already_approved');
-          setMessage(`You already have access to "${listName || listDisplayName}"`);
-          setTimeout(() => navigate(createPageUrl(`ListView?listId=${targetListId}`)), 2000);
-        } else {
-          setStatus('pending');
-          setMessage(`Your request to join "${listName || listDisplayName}" is pending approval from the list owner.`);
-        }
-        return;
-      }
-
-      // Create new membership request
+      // Use secure RPC function that validates token server-side
+      // This prevents attackers from bypassing token validation
       setMessage('Requesting access...');
-      await ListMember.create({
-        list_id: targetListId,
-        user_id: currentUser.id,
-        user_email: currentUser.email,
-        role: 'member',
-        status: 'pending'
-      });
+      const result = await joinListViaShareToken(token);
+
+      if (!result.success) {
+        setStatus('error');
+        setMessage(result.message || 'This share link is invalid or has expired');
+        return;
+      }
+
+      // Set list name from the result
+      if (result.list_name) {
+        setListName(result.list_name);
+      }
+
+      if (result.status === 'already_approved') {
+        setStatus('already_approved');
+        setMessage(`You already have access to "${result.list_name || 'this list'}"`);
+        setTimeout(() => navigate(createPageUrl(`ListView?listId=${result.list_id}`)), 2000);
+        return;
+      }
 
       // Track activity (fire and forget)
       ActivityTracking.create({
@@ -146,20 +106,12 @@ export default function JoinListViaLink() {
       }).catch(err => console.warn('Activity tracking failed:', err));
 
       setStatus('pending');
-      setMessage(`Access request sent! The owner of "${listName || listDisplayName}" will review your request.`);
+      setMessage(result.message || `Access request sent! The owner of "${result.list_name || 'this list'}" will review your request.`);
 
     } catch (error) {
       console.error("Error processing join:", error);
       setStatus('error');
-      
-      // Provide more helpful error messages based on the error type
-      if (error.message?.includes('policy') || error.code === '42501') {
-        setMessage('Unable to join this list. The list owner may need to regenerate the share link.');
-      } else if (error.message?.includes('duplicate') || error.code === '23505') {
-        setMessage('You already have a pending request for this list.');
-      } else {
-        setMessage('Failed to join the list. Please try again.');
-      }
+      setMessage('Failed to join the list. Please try again.');
     }
   };
 
@@ -195,7 +147,10 @@ export default function JoinListViaLink() {
                   You're Invited!
                 </h1>
                 <p className="text-slate-600 dark:text-slate-400 mb-6">
-                  Someone shared a shopping list with you. Sign in or create an account to join and start collaborating!
+                  {listName 
+                    ? `You've been invited to join "${listName}". Sign in or create an account to start collaborating!`
+                    : 'Someone shared a shopping list with you. Sign in or create an account to join and start collaborating!'
+                  }
                 </p>
                 
                 <div className="space-y-3">
