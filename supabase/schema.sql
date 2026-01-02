@@ -740,9 +740,11 @@ BEGIN
         'message', 'You already have access to this list'
       );
     ELSE
+      -- Return 'already_pending' to differentiate from newly created pending memberships
+      -- This prevents duplicate activity tracking on repeat visits
       RETURN json_build_object(
         'success', true,
-        'status', 'pending',
+        'status', 'already_pending',
         'list_id', v_share_link.list_id,
         'list_name', v_list_name,
         'message', 'Your request is pending approval'

@@ -219,7 +219,10 @@ export async function updateStatCount(statKey, delta = 1) {
  * @param {string} shareToken - The share link token
  * @returns {Promise<Object>} Result object with:
  *   - success: boolean
- *   - status: 'pending' | 'already_approved' (if success)
+ *   - status: 'pending' | 'already_pending' | 'already_approved' (if success)
+ *     - 'pending': New membership request created
+ *     - 'already_pending': User already has a pending request (no new record created)
+ *     - 'already_approved': User already has access to the list
  *   - error: 'invalid_token' | 'not_authenticated' | 'server_error' (if !success)
  *   - list_id: UUID (if success)
  *   - list_name: string (if success)

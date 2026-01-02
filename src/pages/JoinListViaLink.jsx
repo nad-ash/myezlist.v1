@@ -95,15 +95,18 @@ export default function JoinListViaLink() {
         return;
       }
 
-      // Track activity (fire and forget)
-      ActivityTracking.create({
-        operation_type: 'CREATE',
-        page: PAGES.JOIN_LIST,
-        operation_name: OPERATIONS.LIST_MEMBER.JOIN,
-        description: `User joined shopping list via share link`,
-        user_id: currentUser.id,
-        timestamp: new Date().toISOString()
-      }).catch(err => console.warn('Activity tracking failed:', err));
+      // Only track activity for NEW membership requests (status === 'pending')
+      // Skip tracking for 'already_pending' to prevent duplicate activity entries on repeat visits
+      if (result.status === 'pending') {
+        ActivityTracking.create({
+          operation_type: 'CREATE',
+          page: PAGES.JOIN_LIST,
+          operation_name: OPERATIONS.LIST_MEMBER.JOIN,
+          description: `User joined shopping list via share link`,
+          user_id: currentUser.id,
+          timestamp: new Date().toISOString()
+        }).catch(err => console.warn('Activity tracking failed:', err));
+      }
 
       setStatus('pending');
       setMessage(result.message || `Access request sent! The owner of "${result.list_name || 'this list'}" will review your request.`);
