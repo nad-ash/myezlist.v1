@@ -12,9 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { ShareLink } from "@/api/entities";
 import { ListMember } from "@/api/entities";
 import { User } from "@/api/entities";
-import { Copy, Check, UserX, Link as LinkIcon, RefreshCw, Users, UserCheck, Clock } from "lucide-react";
+import { Copy, Check, UserX, Link as LinkIcon, RefreshCw, Users, UserCheck, Clock, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+// Maximum number of shared members (excluding owner)
+const MAX_SHARED_MEMBERS = 5;
 
 export default function ShareDialog({ open, onClose, list, onShareLinkCreated }) {
   const [shareLink, setShareLink] = useState(null);
@@ -141,6 +145,11 @@ export default function ShareDialog({ open, onClose, list, onShareLinkCreated })
   };
 
   const isOwner = members.find(m => m.user_id === currentUser?.id)?.role === 'owner';
+  
+  // Count approved members excluding the owner
+  const approvedMembersCount = members.filter(m => m.role !== 'owner' && m.status === 'approved').length;
+  const isAtMemberLimit = approvedMembersCount >= MAX_SHARED_MEMBERS;
+  const remainingSlots = MAX_SHARED_MEMBERS - approvedMembersCount;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -202,34 +211,87 @@ export default function ShareDialog({ open, onClose, list, onShareLinkCreated })
                 <p className="text-xs text-slate-500">
                   Users will need your approval to access this list.
                 </p>
+                
+                {/* Member limit indicator */}
+                <div className={cn(
+                  "mt-3 p-2 rounded-md text-xs",
+                  isAtMemberLimit 
+                    ? "bg-amber-50 text-amber-700 border border-amber-200" 
+                    : "bg-slate-100 text-slate-600"
+                )}>
+                  {isAtMemberLimit ? (
+                    <span className="flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      Member limit reached ({approvedMembersCount}/{MAX_SHARED_MEMBERS}). Remove a member to add more.
+                    </span>
+                  ) : (
+                    <span>{remainingSlots} of {MAX_SHARED_MEMBERS} member slots available</span>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="text-center py-6 bg-slate-50 rounded-lg">
-                <LinkIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-sm text-slate-600 mb-4">
-                  No active share link. Generate one to invite others.
-                </p>
-                <Button
-                  onClick={handleGenerateLink} // Updated to handleGenerateLink
-                  disabled={loading || !isOwner}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {loading ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <LinkIcon className="w-4 h-4 mr-2" />
-                      Generate Share Link
-                    </>
-                  )}
-                </Button>
-                {!isOwner && (
-                  <p className="text-xs text-slate-500 mt-2">
-                    Only the list owner can generate share links.
-                  </p>
+                {!isOwner ? (
+                  // Non-owner: Cannot see share links due to RLS security
+                  // Show appropriate message instead of misleading "no link exists"
+                  <>
+                    <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <Users className="w-6 h-6 text-slate-400" />
+                    </div>
+                    <p className="text-sm font-medium text-slate-800 mb-2">
+                      Share Link Management
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Only the list owner can view and manage share links.
+                    </p>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Contact the list owner if you need to invite someone.
+                    </p>
+                  </>
+                ) : isAtMemberLimit ? (
+                  // Owner at member limit - show warning
+                  <>
+                    <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <AlertCircle className="w-6 h-6 text-amber-600" />
+                    </div>
+                    <p className="text-sm font-medium text-slate-800 mb-2">
+                      Member Limit Reached
+                    </p>
+                    <p className="text-sm text-slate-600 mb-2">
+                      You've reached the maximum of {MAX_SHARED_MEMBERS} shared members for this list.
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Remove an existing member to share with someone new.
+                    </p>
+                  </>
+                ) : (
+                  // Owner can generate share link
+                  <>
+                    <LinkIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                    <p className="text-sm text-slate-600 mb-2">
+                      No active share link. Generate one to invite others.
+                    </p>
+                    <p className="text-xs text-slate-500 mb-4">
+                      {remainingSlots} of {MAX_SHARED_MEMBERS} member slots available
+                    </p>
+                    <Button
+                      onClick={handleGenerateLink}
+                      disabled={loading}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {loading ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <LinkIcon className="w-4 h-4 mr-2" />
+                          Generate Share Link
+                        </>
+                      )}
+                    </Button>
+                  </>
                 )}
               </div>
             )}
@@ -253,6 +315,16 @@ export default function ShareDialog({ open, onClose, list, onShareLinkCreated })
               </TabsList>
 
               <TabsContent value="pending" className="mt-4">
+                {/* Warning when at limit with pending requests */}
+                {isAtMemberLimit && pendingMembers.length > 0 && (
+                  <Alert className="mb-4 bg-amber-50 border-amber-200">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-700 text-sm">
+                      Member limit reached ({MAX_SHARED_MEMBERS} max). Remove an approved member before approving new requests.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                
                 {pendingMembers.length === 0 ? (
                   <div className="text-center py-8 text-slate-500">
                     <Clock className="w-12 h-12 text-slate-300 mx-auto mb-2" />
@@ -287,8 +359,12 @@ export default function ShareDialog({ open, onClose, list, onShareLinkCreated })
                             <Button
                               onClick={() => approveMember(member)}
                               size="sm"
-                              disabled={loading}
-                              className="bg-green-600 hover:bg-green-700"
+                              disabled={loading || isAtMemberLimit}
+                              className={cn(
+                                "bg-green-600 hover:bg-green-700",
+                                isAtMemberLimit && "opacity-50 cursor-not-allowed"
+                              )}
+                              title={isAtMemberLimit ? `Member limit reached (${MAX_SHARED_MEMBERS} max)` : "Approve this member"}
                             >
                               <UserCheck className="w-4 h-4 mr-1" />
                               Approve

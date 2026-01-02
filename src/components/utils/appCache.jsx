@@ -7,6 +7,26 @@ import { logger } from "@/utils/logger";
 
 const DEFAULT_CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 
+// Maximum number of shopping list caches to keep (LRU eviction)
+const MAX_SHOPPING_LIST_CACHES = 10;
+
+/**
+ * Safely set an item in localStorage, handling quota exceeded errors
+ * Returns true if successful, false if failed
+ */
+function safeLocalStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (error) {
+    if (error.name === 'QuotaExceededError' || error.code === 22) {
+      logger.warn('localStorage quota exceeded, attempting cleanup...');
+      return false;
+    }
+    throw error;
+  }
+}
+
 class AppCache {
   constructor() {
     this.memoryCache = {
@@ -18,6 +38,94 @@ class AppCache {
       allShoppingLists: null,
       listMemberships: null
     };
+  }
+
+  /**
+   * Free up localStorage space by removing old shopping list caches
+   * Uses LRU-like eviction based on timestamp
+   */
+  freeUpStorageSpace() {
+    try {
+      const keys = Object.keys(localStorage);
+      const shoppingListCaches = [];
+
+      // Collect all shopping list caches with their timestamps
+      keys.forEach(key => {
+        if (key.startsWith('app_cache_shopping_list_')) {
+          try {
+            const cached = localStorage.getItem(key);
+            if (cached) {
+              const { timestamp } = JSON.parse(cached);
+              shoppingListCaches.push({ key, timestamp: timestamp || 0 });
+            }
+          } catch (e) {
+            // Corrupted cache entry, mark for removal
+            shoppingListCaches.push({ key, timestamp: 0 });
+          }
+        }
+      });
+
+      // Sort by timestamp (oldest first)
+      shoppingListCaches.sort((a, b) => a.timestamp - b.timestamp);
+
+      // Remove oldest caches until we're under the limit or have removed at least 3
+      const toRemove = Math.max(3, shoppingListCaches.length - MAX_SHOPPING_LIST_CACHES + 2);
+      let removed = 0;
+
+      for (let i = 0; i < toRemove && i < shoppingListCaches.length; i++) {
+        localStorage.removeItem(shoppingListCaches[i].key);
+        removed++;
+      }
+
+      // Also try clearing expired caches of any type
+      this.clearExpiredCaches();
+
+      logger.cache('AppCache', `Freed up space by removing ${removed} old shopping list caches`);
+      return removed > 0;
+    } catch (error) {
+      console.error('Error freeing up storage space:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Clear all expired caches across all cache types
+   */
+  clearExpiredCaches() {
+    try {
+      const keys = Object.keys(localStorage);
+      const now = Date.now();
+      let cleared = 0;
+
+      keys.forEach(key => {
+        if (key.startsWith('app_cache_')) {
+          try {
+            const cached = localStorage.getItem(key);
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (parsed.timestamp) {
+                // Use a generous 24-hour expiration for cleanup purposes
+                const maxAge = 24 * 60 * 60 * 1000;
+                if (now - parsed.timestamp > maxAge) {
+                  localStorage.removeItem(key);
+                  cleared++;
+                }
+              }
+            }
+          } catch (e) {
+            // Corrupted entry, remove it
+            localStorage.removeItem(key);
+            cleared++;
+          }
+        }
+      });
+
+      if (cleared > 0) {
+        logger.cache('AppCache', `Cleared ${cleared} expired/corrupted cache entries`);
+      }
+    } catch (error) {
+      console.error('Error clearing expired caches:', error);
+    }
   }
 
   /**
@@ -423,6 +531,7 @@ class AppCache {
 
   /**
    * Set recipes in cache
+   * Handles localStorage quota exceeded errors gracefully
    */
   setRecipes(recipesData) {
     // Don't cache if disabled
@@ -436,10 +545,24 @@ class AppCache {
         data: recipesData,
         timestamp: Date.now()
       };
-      localStorage.setItem('app_cache_recipes', JSON.stringify(cacheData));
+      const key = 'app_cache_recipes';
+      const value = JSON.stringify(cacheData);
+
+      // Always update memory cache
       this.memoryCache.recipes = recipesData;
+
+      // Try to set in localStorage
+      if (!safeLocalStorageSet(key, value)) {
+        // Quota exceeded - try to free up space and retry
+        this.freeUpStorageSpace();
+        if (!safeLocalStorageSet(key, value)) {
+          logger.warn('Unable to cache recipes after cleanup - using memory cache only');
+        }
+      }
     } catch (error) {
       console.error('Error setting recipes cache:', error);
+      // Still keep in memory cache even if localStorage fails
+      this.memoryCache.recipes = recipesData;
     }
   }
 
@@ -483,6 +606,7 @@ class AppCache {
 
   /**
    * Set list memberships in cache for a specific user
+   * Handles localStorage quota exceeded errors gracefully
    */
   setListMemberships(userId, membershipsData) {
     // Don't cache if disabled
@@ -496,10 +620,22 @@ class AppCache {
         data: membershipsData,
         timestamp: Date.now()
       };
-      localStorage.setItem(`app_cache_list_memberships_${userId}`, JSON.stringify(cacheData));
+      const key = `app_cache_list_memberships_${userId}`;
+      const value = JSON.stringify(cacheData);
+
+      // Always update memory cache
       this.memoryCache.listMemberships = membershipsData;
+
+      // Try to set in localStorage
+      if (!safeLocalStorageSet(key, value)) {
+        this.freeUpStorageSpace();
+        if (!safeLocalStorageSet(key, value)) {
+          logger.warn('Unable to cache list memberships - using memory cache only');
+        }
+      }
     } catch (error) {
       console.error('Error setting list memberships cache:', error);
+      this.memoryCache.listMemberships = membershipsData;
     }
   }
 
@@ -568,6 +704,7 @@ class AppCache {
 
   /**
    * Set all ShoppingList entities in cache
+   * Handles localStorage quota exceeded errors gracefully
    */
   setShoppingListEntities(listsData) {
     // Don't cache if disabled
@@ -581,10 +718,22 @@ class AppCache {
         data: listsData,
         timestamp: Date.now()
       };
-      localStorage.setItem('app_cache_all_shopping_lists', JSON.stringify(cacheData));
+      const key = 'app_cache_all_shopping_lists';
+      const value = JSON.stringify(cacheData);
+
+      // Always update memory cache
       this.memoryCache.allShoppingLists = listsData;
+
+      // Try to set in localStorage
+      if (!safeLocalStorageSet(key, value)) {
+        this.freeUpStorageSpace();
+        if (!safeLocalStorageSet(key, value)) {
+          logger.warn('Unable to cache shopping list entities - using memory cache only');
+        }
+      }
     } catch (error) {
       console.error('Error setting shopping list entities cache:', error);
+      this.memoryCache.allShoppingLists = listsData;
     }
   }
 
@@ -636,6 +785,7 @@ class AppCache {
   /**
    * Set shopping list in cache for a specific list ID
    * NEW: Each list has its own cache for granular control
+   * Handles localStorage quota exceeded errors gracefully
    */
   setShoppingList(listId, listData) {
     // Don't cache if disabled
@@ -649,8 +799,23 @@ class AppCache {
         data: listData,
         timestamp: Date.now()
       };
-      localStorage.setItem(`app_cache_shopping_list_${listId}`, JSON.stringify(cacheData));
+      const key = `app_cache_shopping_list_${listId}`;
+      const value = JSON.stringify(cacheData);
+
+      // Try to set the item
+      if (!safeLocalStorageSet(key, value)) {
+        // Quota exceeded - try to free up space and retry
+        logger.cache('AppCache', 'Quota exceeded, freeing up space...');
+        this.freeUpStorageSpace();
+        
+        // Retry once after cleanup
+        if (!safeLocalStorageSet(key, value)) {
+          // Still failing - give up gracefully
+          logger.warn('Unable to cache shopping list after cleanup - storage may be full');
+        }
+      }
     } catch (error) {
+      // Log but don't throw - caching is non-critical
       console.error('Error setting shopping list cache:', error);
     }
   }

@@ -17,6 +17,10 @@ import UpgradePrompt from "@/components/common/UpgradePrompt";
 import { incrementUsage, decrementUsage } from "@/components/utils/usageSync";
 import { logger } from "@/utils/logger";
 
+// Track if hard refresh was already handled this session
+// This prevents clearing caches on every SPA navigation
+let hardRefreshHandled = false;
+
 export default function ManageListsPage() {
   const navigate = useNavigate();
   const [lists, setLists] = useState([]);
@@ -32,13 +36,17 @@ export default function ManageListsPage() {
   const [deleteListConfirm, setDeleteListConfirm] = useState({ open: false, list: null });
 
   useEffect(() => {
-    // Check for hard refresh to ensure fresh data
-    const perfEntries = performance.getEntriesByType('navigation');
-    if (perfEntries.length > 0 && perfEntries[0].type === 'reload') {
-      logger.cache('ManageLists', 'Hard refresh detected - clearing caches');
-      appCache.clearShoppingListEntities();
-      appCache.clearAllShoppingLists();
-      appCache.clearListMemberships();
+    // Check for hard refresh to ensure fresh data - only handle ONCE per session
+    // The navigation entry persists across SPA navigations, so we track if we've handled it
+    if (!hardRefreshHandled) {
+      const perfEntries = performance.getEntriesByType('navigation');
+      if (perfEntries.length > 0 && perfEntries[0].type === 'reload') {
+        logger.cache('ManageLists', 'Hard refresh detected - clearing caches');
+        appCache.clearShoppingListEntities();
+        appCache.clearAllShoppingLists();
+        appCache.clearListMemberships();
+      }
+      hardRefreshHandled = true;
     }
 
     loadData();

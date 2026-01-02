@@ -212,3 +212,56 @@ export async function updateStatCount(statKey, delta = 1) {
   return data;
 }
 
+/**
+ * Securely join a list via share token
+ * Validates the token server-side and creates a membership request
+ * 
+ * @param {string} shareToken - The share link token
+ * @returns {Promise<Object>} Result object with:
+ *   - success: boolean
+ *   - status: 'pending' | 'already_pending' | 'already_approved' (if success)
+ *     - 'pending': New membership request created
+ *     - 'already_pending': User already has a pending request (no new record created)
+ *     - 'already_approved': User already has access to the list
+ *   - error: 'invalid_token' | 'not_authenticated' | 'server_error' (if !success)
+ *   - list_id: UUID (if success)
+ *   - list_name: string (if success)
+ *   - message: string
+ */
+export async function joinListViaShareToken(shareToken) {
+  const { data, error } = await supabase.rpc('join_list_via_share_token', {
+    share_token: shareToken
+  });
+  
+  if (error) {
+    console.error('Failed to join list via share token:', error);
+    throw error;
+  }
+  
+  return data;
+}
+
+/**
+ * Validate a share token (can be called before authentication)
+ * Used to show "Sign in to join" UI with list name
+ * 
+ * @param {string} shareToken - The share link token to validate
+ * @returns {Promise<Object>} Result object with:
+ *   - valid: boolean
+ *   - list_name: string (if valid)
+ *   - message: string (if !valid)
+ */
+export async function validateShareToken(shareToken) {
+  const { data, error } = await supabase.rpc('validate_share_token', {
+    share_token: shareToken
+  });
+  
+  if (error) {
+    console.error('Failed to validate share token:', error);
+    // Return invalid rather than throwing for better UX
+    return { valid: false, message: 'Unable to validate share link' };
+  }
+  
+  return data;
+}
+
