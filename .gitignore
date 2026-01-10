@@ -30,3 +30,7 @@ dist-ssr
 
 # Supabase CLI temporary files
 supabase/.temp/
+
+# Capacitor native platforms (regenerate with `npx cap add ios` and `npx cap add android`)
+ios/
+android/

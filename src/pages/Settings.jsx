@@ -26,6 +26,7 @@ import { createPageUrl } from "@/utils";
 import { createCheckoutSession } from "@/api/functions";
 import { createCustomerPortal } from "@/api/functions";
 import { appCache } from "@/components/utils/appCache";
+import { isNativeApp } from "@/utils/paymentPlatform";
 
 const tierIcons = {
   free: Package,
@@ -661,7 +662,7 @@ export default function SettingsPage() {
                       ) : (
                         <>
                           Upgrade to {tier.display_name}
-                          <ExternalLink className="w-4 h-4" />
+                          {!isNativeApp() && <ExternalLink className="w-4 h-4" />}
                         </>
                       )}
                     </Button>
