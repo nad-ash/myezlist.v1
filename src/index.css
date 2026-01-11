@@ -156,3 +156,90 @@ button:focus-visible {
     @apply bg-background text-foreground;
   }
 }
+
+/* iOS Safe Area Handling for Native Apps
+ * On iOS, the status bar is transparent and overlays content.
+ */
+
+/* Lock the viewport - prevent scrolling beyond content */
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  overscroll-behavior: none;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Blue status bar background - fixed at the very top */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background-color: #2563eb; /* Blue theme color */
+  z-index: 10000;
+  pointer-events: none;
+}
+
+/* Dark mode: slate status bar */
+html.dark body::before,
+.dark body::before,
+.theme-dark body::before {
+  background-color: #1e293b;
+}
+
+/* Header positioned just below the status bar */
+header.fixed {
+  top: env(safe-area-inset-top, 0px) !important;
+}
+
+/* Desktop sidebar: below status bar + header */
+aside.fixed {
+  top: calc(env(safe-area-inset-top, 0px) + 4rem) !important;
+}
+
+/* Main content: account for status bar + header */
+.pt-16 {
+  padding-top: calc(4rem + env(safe-area-inset-top, 0px)) !important;
+}
+
+/* Bottom nav - solid background and ensure clickability */
+nav.fixed.bottom-0 {
+  background-color: #ffffff !important;
+  z-index: 9999 !important;
+  pointer-events: auto !important;
+}
+
+html.dark nav.fixed.bottom-0,
+.dark nav.fixed.bottom-0 {
+  background-color: #1e293b !important;
+}
+
+/* Main content bottom padding: nav height (56px) + padding (24px) + buffer */
+.main-content-pb {
+  padding-bottom: calc(4.5rem + 24px) !important;
+}
+
+/* Scrollable main content area - height must account for header and nav */
+.main-scrollable {
+  height: calc(100vh - 4rem - 3.5rem - env(safe-area-inset-top, 0px) - 24px) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safe area padding for iPhone home indicator - minimal for tighter fit */
+.pb-safe {
+  padding-bottom: 8px;
+}

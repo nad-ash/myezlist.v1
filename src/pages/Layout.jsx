@@ -69,8 +69,8 @@ const MobileNavigation = React.memo(({ isAdmin }) => {
   const navItems = isAdmin ? adminNavigationItems : navigationItems;
   
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-slate-200 z-50 dark:bg-slate-900/95 dark:border-slate-700 transition-colors duration-300 pb-safe">
-      <div className="flex justify-around items-center h-20 px-2 pt-2 pb-4">
+    <nav className="md:hidden fixed left-0 right-0 bg-white border-t border-slate-200 z-[9999] dark:bg-slate-900 dark:border-slate-700 transition-colors duration-300" style={{ bottom: 0, paddingBottom: '24px' }}>
+      <div className="flex justify-around items-center h-14 px-2">
         {navItems.map((item) => {
           const isActive = location.pathname === createPageUrl(item.url);
           return (
@@ -661,12 +661,12 @@ export default function Layout({ children, currentPageName }) {
         {showDesktopSidebar ? (
           <div className="flex pt-16">
             <DesktopSidebar navItems={sidebarNavItems} />
-            <main className="flex-1 pb-20 md:pb-8 md:ml-64">
+            <main className="flex-1 main-content-pb md:pb-8 md:ml-64 main-scrollable">
               {children}
             </main>
           </div>
         ) : (
-          <main className={isJoinPage ? "pt-16" : "pt-16 pb-20 md:pb-8"}>
+          <main className={isJoinPage ? "pt-16 main-scrollable" : "pt-16 main-content-pb md:pb-8 main-scrollable"}>
             {children}
           </main>
         )}

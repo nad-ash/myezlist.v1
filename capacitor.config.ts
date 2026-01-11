@@ -14,8 +14,10 @@ const config: CapacitorConfig = {
   },
   ios: {
     // iOS-specific settings
-    contentInset: 'automatic',
-    scheme: 'MyEZList',
+    contentInset: 'never', // Disable automatic safe area - we handle it in CSS
+    // Custom URL scheme for OAuth deep linking (myezlist://)
+    scheme: 'myezlist',
+    // White background - the fixed body/overflow:hidden prevents scroll issues
     backgroundColor: '#ffffff'
   },
   android: {
