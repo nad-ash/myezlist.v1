@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabaseAuth, supabase } from "@/api/supabaseClient";
 import { Loader2, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { isNativeApp } from "@/utils/paymentPlatform";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -105,8 +106,17 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const redirectUrl = localStorage.getItem('redirectAfterLogin') || createPageUrl("Home");
-      await supabaseAuth.signInWithOAuth(provider, window.location.origin + '/auth/callback?redirect=' + encodeURIComponent(redirectUrl));
+      const storedRedirect = localStorage.getItem('redirectAfterLogin') || createPageUrl("Home");
+      
+      // For native apps, use custom URL scheme for callback
+      const callbackUrl = isNativeApp()
+        ? `myezlist://auth/callback?redirect=${encodeURIComponent(storedRedirect)}`
+        : `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(storedRedirect)}`;
+        
+      await supabaseAuth.signInWithOAuth(provider, callbackUrl);
+      
+      // Note: On native, the app will be redirected via deep link
+      // On web, the browser will redirect automatically
     } catch (err) {
       setError(err.message || `Failed to sign in with ${provider}`);
       setIsLoading(false);

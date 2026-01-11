@@ -159,7 +159,7 @@ export default function AdvancedActivityTrackingPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 lg:py-8 pb-20 md:pb-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 lg:py-8 main-content-pb md:pb-8">
       {/* Header */}
       <div className="mb-4 sm:mb-6 md:mb-8">
         <div className="flex items-center gap-2 sm:gap-3 md:gap-4 mb-3 sm:mb-4">
