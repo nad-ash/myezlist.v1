@@ -97,22 +97,22 @@ export default function ShoppingModePage() {
         logger.cache('ShoppingMode', 'Using cached ListMember data');
       }
       
-      const approvedMemberships = memberships.filter(m => m.status === 'approved' || m.role === 'owner');
-      const listIds = approvedMemberships.map(m => m.list_id);
+      // Try to get all ShoppingList entities from cache first
+      // RLS will return all lists user has access to (owned, member, or family-shared)
+      let allLists = appCache.getShoppingListEntities();
+      
+      if (!allLists) {
+        logger.cache('ShoppingMode', 'Fetching ShoppingList entities from API (cache miss)');
+        allLists = await ShoppingList.list();
+        appCache.setShoppingListEntities(allLists);
+      } else {
+        logger.cache('ShoppingMode', 'Using cached ShoppingList entities');
+      }
+      
+      // Filter to non-archived lists (RLS already handles access control)
+      const userLists = allLists.filter(list => !list.archived);
 
-      if (listIds.length > 0) {
-        // Try to get all ShoppingList entities from cache first
-        let allLists = appCache.getShoppingListEntities();
-        
-        if (!allLists) {
-          logger.cache('ShoppingMode', 'Fetching ShoppingList entities from API (cache miss)');
-          allLists = await ShoppingList.list();
-          appCache.setShoppingListEntities(allLists);
-        } else {
-          logger.cache('ShoppingMode', 'Using cached ShoppingList entities');
-        }
-        
-        const userLists = allLists.filter(list => listIds.includes(list.id) && !list.archived);
+      if (userLists.length > 0) {
         
         let totalItemsCount = 0;
         let activeItemsCount = 0;

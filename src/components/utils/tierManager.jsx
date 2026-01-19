@@ -1,9 +1,11 @@
 import { User, SubscriptionTier } from "@/api/entities";
 import { appCache } from "./appCache";
+import { getFamilyCreditsRemaining, getFamilyInfo, getUserResourceCounts } from "@/services/familyService";
 
 /**
  * Get user's current tier information, limits, and usage
  * Uses cache to minimize API calls
+ * Supports family credit pooling - uses family pool credits if user is in a family group
  */
 export async function getUserTierInfo() {
   try {
@@ -34,18 +36,49 @@ export async function getUserTierInfo() {
       throw new Error(`Tier ${userTierName} not found`);
     }
 
-    // Calculate credit usage
-    const creditsTotal = user.monthly_credits_total || tier.monthly_credits;
-    const creditsUsed = user.credits_used_this_month || 0;
-    const creditsRemaining = Math.max(0, creditsTotal - creditsUsed);
-    const creditsPercentage = creditsTotal > 0 ? Math.round((creditsRemaining / creditsTotal) * 100) : 0;
+    // Get credit usage - use family pool if user is in a family group
+    let creditsTotal, creditsUsed, creditsRemaining, creditsPercentage, isFamilyPool = false;
+    let familyInfo = null;
+    
+    try {
+      // Try to get family credits info (will return individual credits if not in a family)
+      const creditsInfo = await getFamilyCreditsRemaining(user.id);
+      console.log('👨‍👩‍👧‍👦 tierManager: Credits info:', creditsInfo);
+      
+      creditsTotal = creditsInfo.monthly_credits || tier.monthly_credits;
+      creditsUsed = creditsInfo.credits_used || 0;
+      creditsRemaining = creditsInfo.credits_remaining || 0;
+      isFamilyPool = creditsInfo.is_family_pool || false;
+      
+      // If user is in a family pool, also get family info to determine if they're owner or member
+      if (isFamilyPool) {
+        try {
+          familyInfo = await getFamilyInfo();
+          console.log('👨‍👩‍👧‍👦 tierManager: Family info:', familyInfo);
+        } catch (familyInfoError) {
+          console.warn('👨‍👩‍👧‍👦 tierManager: Could not fetch family info:', familyInfoError);
+        }
+      }
+    } catch (familyError) {
+      // Fallback to individual credits if family check fails
+      console.warn('👨‍👩‍👧‍👦 tierManager: Family credits check failed, using individual:', familyError);
+      creditsTotal = user.monthly_credits_total || tier.monthly_credits;
+      creditsUsed = user.credits_used_this_month || 0;
+      creditsRemaining = Math.max(0, creditsTotal - creditsUsed);
+    }
+    
+    creditsPercentage = creditsTotal > 0 ? Math.round((creditsRemaining / creditsTotal) * 100) : 0;
 
-    // If user's credits don't match tier config, update them
-    if (creditsTotal !== tier.monthly_credits) {
+    // If user's credits don't match tier config, update them (only for non-family members)
+    if (!isFamilyPool && (user.monthly_credits_total || tier.monthly_credits) !== tier.monthly_credits) {
       const updates = { monthly_credits_total: tier.monthly_credits };
       await User.updateMe(updates);
       appCache.updateUser(updates);
     }
+
+    // Determine if user is a family member (not owner)
+    const isFamilyMember = isFamilyPool && familyInfo?.has_family && !familyInfo?.is_owner;
+    const isFamilyOwner = isFamilyPool && familyInfo?.has_family && familyInfo?.is_owner;
 
     return {
       user,
@@ -65,6 +98,12 @@ export async function getUserTierInfo() {
         creditsUsed,
         creditsRemaining,
         creditsPercentage,
+        isFamilyPool,
+      },
+      family: {
+        isFamilyMember,
+        isFamilyOwner,
+        familyName: familyInfo?.family_group?.name || null,
       },
     };
   } catch (error) {
@@ -75,16 +114,30 @@ export async function getUserTierInfo() {
 
 /**
  * Check if user can create a new shopping list
+ * Uses family-aware counts when user is in a family group
  */
 export async function canCreateShoppingList() {
   try {
     // Force fresh user data by clearing cache first
     appCache.clearUser();
     
-    const { limits, user } = await getUserTierInfo();
+    const { limits, user, family } = await getUserTierInfo();
     
-    // Use user's current_shopping_lists count (which is kept in sync via incrementUsage/decrementUsage)
-    const currentListCount = user.current_shopping_lists || 0;
+    let currentListCount;
+    
+    // If user is in a family, use family-aware resource counts
+    if (family?.isFamilyMember || family?.isFamilyOwner) {
+      try {
+        const resourceCounts = await getUserResourceCounts(user.id);
+        currentListCount = resourceCounts?.shopping_lists || 0;
+        console.log('👨‍👩‍👧‍👦 tierManager: Using family-aware list count:', currentListCount);
+      } catch (familyCountError) {
+        console.warn('👨‍👩‍👧‍👦 tierManager: Failed to get family counts, using individual:', familyCountError);
+        currentListCount = user.current_shopping_lists || 0;
+      }
+    } else {
+      currentListCount = user.current_shopping_lists || 0;
+    }
     
     const canCreate = currentListCount < limits.maxShoppingLists;
     
@@ -107,6 +160,7 @@ export async function canCreateShoppingList() {
 
 /**
  * Check if user can add a new item to a shopping list
+ * Uses family-aware counts when user is in a family group
  * @param {boolean} useCache - If true, use cached data for fast response (default: false for accuracy)
  */
 export async function canAddItem(useCache = false) {
@@ -116,10 +170,23 @@ export async function canAddItem(useCache = false) {
       appCache.clearUser();
     }
     
-    const { limits, user } = await getUserTierInfo();
+    const { limits, user, family } = await getUserTierInfo();
     
-    // Use user's current_total_items count (which is kept in sync via incrementUsage/decrementUsage)
-    const currentItemCount = user.current_total_items || 0;
+    let currentItemCount;
+    
+    // If user is in a family, use family-aware resource counts
+    if (family?.isFamilyMember || family?.isFamilyOwner) {
+      try {
+        const resourceCounts = await getUserResourceCounts(user.id);
+        currentItemCount = resourceCounts?.total_items || 0;
+        console.log('👨‍👩‍👧‍👦 tierManager: Using family-aware item count:', currentItemCount);
+      } catch (familyCountError) {
+        console.warn('👨‍👩‍👧‍👦 tierManager: Failed to get family counts, using individual:', familyCountError);
+        currentItemCount = user.current_total_items || 0;
+      }
+    } else {
+      currentItemCount = user.current_total_items || 0;
+    }
     
     const canAdd = currentItemCount < limits.maxTotalItems;
     
@@ -142,16 +209,30 @@ export async function canAddItem(useCache = false) {
 
 /**
  * Check if user can create a new task
+ * Uses family-aware counts when user is in a family group
  */
 export async function canCreateTask() {
   try {
     // Force fresh user data by clearing cache first
     appCache.clearUser();
     
-    const { limits, user } = await getUserTierInfo();
+    const { limits, user, family } = await getUserTierInfo();
     
-    // Use user's current_tasks count (which is kept in sync via incrementUsage/decrementUsage)
-    const currentTaskCount = user.current_tasks || 0;
+    let currentTaskCount;
+    
+    // If user is in a family, use family-aware resource counts
+    if (family?.isFamilyMember || family?.isFamilyOwner) {
+      try {
+        const resourceCounts = await getUserResourceCounts(user.id);
+        currentTaskCount = resourceCounts?.tasks || 0;
+        console.log('👨‍👩‍👧‍👦 tierManager: Using family-aware task count:', currentTaskCount);
+      } catch (familyCountError) {
+        console.warn('👨‍👩‍👧‍👦 tierManager: Failed to get family counts, using individual:', familyCountError);
+        currentTaskCount = user.current_tasks || 0;
+      }
+    } else {
+      currentTaskCount = user.current_tasks || 0;
+    }
     
     const canCreate = currentTaskCount < limits.maxTasks;
     
@@ -174,16 +255,30 @@ export async function canCreateTask() {
 
 /**
  * Check if user can create a new custom recipe
+ * Uses family-aware counts when user is in a family group
  */
 export async function canCreateCustomRecipe() {
   try {
     // Force fresh user data by clearing cache first
     appCache.clearUser();
     
-    const { limits, user } = await getUserTierInfo();
+    const { limits, user, family } = await getUserTierInfo();
     
-    // Use user's current_custom_recipes count (which is kept in sync via incrementUsage/decrementUsage)
-    const currentRecipeCount = user.current_custom_recipes || 0;
+    let currentRecipeCount;
+    
+    // If user is in a family, use family-aware resource counts
+    if (family?.isFamilyMember || family?.isFamilyOwner) {
+      try {
+        const resourceCounts = await getUserResourceCounts(user.id);
+        currentRecipeCount = resourceCounts?.custom_recipes || 0;
+        console.log('👨‍👩‍👧‍👦 tierManager: Using family-aware recipe count:', currentRecipeCount);
+      } catch (familyCountError) {
+        console.warn('👨‍👩‍👧‍👦 tierManager: Failed to get family counts, using individual:', familyCountError);
+        currentRecipeCount = user.current_custom_recipes || 0;
+      }
+    } else {
+      currentRecipeCount = user.current_custom_recipes || 0;
+    }
     
     const canCreate = currentRecipeCount < limits.maxCustomRecipes;
     

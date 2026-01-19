@@ -5,7 +5,8 @@ import { updateStatCount } from "@/api/functions";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CheckCircle2, ChevronDown, ChevronRight, Home, Briefcase, User as UserIcon, ShoppingBag, Users, Heart, DollarSign, MoreHorizontal, Loader2, Shield, X } from "lucide-react";
+import { Plus, CheckCircle2, ChevronDown, ChevronRight, Home, Briefcase, User as UserIcon, ShoppingBag, Users, Heart as HeartIcon, DollarSign, MoreHorizontal, Loader2, Shield, X } from "lucide-react";
+import { getFamilyInfo } from "@/services/familyService";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { createPageUrl } from "@/utils";
@@ -26,7 +27,7 @@ const categoryConfig = {
   personal: { label: "Personal", icon: UserIcon, color: "bg-pink-500" },
   errands: { label: "Errands", icon: ShoppingBag, color: "bg-orange-500" },
   family: { label: "Family", icon: Users, color: "bg-rose-500" },
-  health: { label: "Health", icon: Heart, color: "bg-green-500" },
+  health: { label: "Health", icon: HeartIcon, color: "bg-green-500" },
   finance: { label: "Finance", icon: DollarSign, color: "bg-cyan-500" },
   other: { label: "Other", icon: MoreHorizontal, color: "bg-slate-500" }
 };
@@ -61,6 +62,7 @@ export default function TodosPage() {
     // Check if user has dismissed the notice before
     return localStorage.getItem('tasks_security_notice_dismissed') !== 'true';
   });
+  const [isInFamily, setIsInFamily] = useState(false);
   const queryClient = useQueryClient();
 
   const dismissSecurityNotice = () => {
@@ -103,6 +105,17 @@ export default function TodosPage() {
       
       appCache.setUser(currentUser);
       setUser(currentUser);
+      
+      // Check if user is in a family group
+      try {
+        const familyInfo = await getFamilyInfo();
+        if (familyInfo.success && familyInfo.has_family) {
+          setIsInFamily(true);
+          console.log('👨‍👩‍👧‍👦 Todos: User is in a family group');
+        }
+      } catch (familyError) {
+        console.warn('👨‍👩‍👧‍👦 Todos: Could not check family status');
+      }
     } catch (error) {
       console.error("Authentication required:", error);
       User.redirectToLogin(createPageUrl("Todos"));
@@ -111,11 +124,22 @@ export default function TodosPage() {
     }
   };
 
-  // CRITICAL FIX: Filter todos by current user's email
+  // Fetch all accessible todos (user's own + family-shared)
+  // RLS policy handles access control - we just fetch all that RLS allows
   // Uses EncryptedTodo which automatically decrypts title/description
+  // Note: Family-shared tasks are stored unencrypted so family members can read them
   const { data: todos = [], isLoading } = useQuery({
-    queryKey: ['todos', user?.email],
-    queryFn: () => EncryptedTodo.filter({ created_by: user.email }, user.id, '-created_date'),
+    queryKey: ['todos', user?.id, isInFamily],
+    queryFn: async () => {
+      if (isInFamily) {
+        // For family members: fetch all accessible tasks (RLS handles filtering)
+        console.log('👨‍👩‍👧‍👦 Todos: Fetching all accessible tasks (user + family-shared)');
+        return EncryptedTodo.list(user.id, '-created_date');
+      } else {
+        // For non-family users: filter by email (more efficient)
+        return EncryptedTodo.filter({ created_by: user.email }, user.id, '-created_date');
+      }
+    },
     enabled: !!user && !!user.email && !!user.id,
   });
 
@@ -555,6 +579,7 @@ export default function TodosPage() {
         }}
         onSave={handleSubmit}
         editTodo={editingTodo}
+        isInFamily={isInFamily}
       />
 
       <UpgradePrompt

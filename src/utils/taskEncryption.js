@@ -185,6 +185,8 @@ export async function decryptField(encryptedData, userId) {
  * Only encrypts sensitive fields (title, description)
  * Leaves operational fields unencrypted (due_date, status, priority, etc.)
  * 
+ * NOTE: Family-shared tasks are NOT encrypted so family members can read them
+ * 
  * @param {Object} taskData - Task data with plaintext fields
  * @param {string} userId - User's Supabase UUID
  * @returns {Promise<Object>} - Task data with encrypted sensitive fields
@@ -194,7 +196,14 @@ export async function encryptTaskForStorage(taskData, userId) {
   
   const encrypted = { ...taskData };
   
-  // Encrypt sensitive fields
+  // IMPORTANT: Family-shared tasks are stored unencrypted so family members can read them
+  // This is a trade-off: family-shared = readable by family but less private
+  if (taskData.shared_with_family) {
+    console.log('📝 Task is family-shared, storing unencrypted for family access');
+    return encrypted;
+  }
+  
+  // Encrypt sensitive fields for private tasks
   if (taskData.title) {
     encrypted.title = await encryptField(taskData.title, userId);
   }

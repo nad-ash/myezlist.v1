@@ -1,6 +1,6 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { ShoppingCart, Store, ShoppingBasket, Apple, Home as HomeIcon, Sparkles, Gift, Utensils, ChevronRight, Trash2, Edit } from "lucide-react";
+import { ShoppingCart, Store, ShoppingBasket, Apple, Home as HomeIcon, Sparkles, Gift, Utensils, ChevronRight, Trash2, Edit, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -26,7 +26,7 @@ const colorMap = {
   beige: "from-amber-400 to-amber-600",
 };
 
-export default function ListCard({ list, itemCount, checkedCount, onClick, onDelete, onEdit, isOwner }) {
+export default function ListCard({ list, itemCount, checkedCount, onClick, onDelete, onEdit, isOwner, isFamilyShared }) {
   const Icon = iconMap[list.icon] || ShoppingCart;
   const gradient = colorMap[list.color] || colorMap.ocean;
 
@@ -71,6 +71,12 @@ export default function ListCard({ list, itemCount, checkedCount, onClick, onDel
             {isOwner && (
               <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-xs px-1.5 py-0">
                 Owner
+              </Badge>
+            )}
+            {isFamilyShared && !isOwner && (
+              <Badge variant="secondary" className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-xs px-1.5 py-0 flex items-center gap-0.5">
+                <Users className="w-3 h-3" />
+                Family
               </Badge>
             )}
           </div>

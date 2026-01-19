@@ -17,7 +17,8 @@ import {
   XCircle,
   CreditCard,
   Package,
-  AlertCircle
+  AlertCircle,
+  Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getUserTierInfo } from "@/components/utils/tierManager";
@@ -28,6 +29,8 @@ import { createCustomerPortal } from "@/api/functions";
 import { appCache } from "@/components/utils/appCache";
 import { isNativeApp } from "@/utils/paymentPlatform";
 import TaskEncryptionMigration from "@/components/settings/TaskEncryptionMigration";
+import FamilySharing from "@/components/settings/FamilySharing";
+import { getUserResourceCounts } from "@/services/familyService";
 
 const tierIcons = {
   free: Package,
@@ -62,6 +65,7 @@ export default function SettingsPage() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [showCancelMessage, setShowCancelMessage] = useState(false);
   const [upgradeDetails, setUpgradeDetails] = useState({ from: '', to: '' });
+  const [resourceCounts, setResourceCounts] = useState(null);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -131,6 +135,17 @@ export default function SettingsPage() {
         // Check if webhook has processed (tier matches expected tier)
         if (!isAfterPayment || !expectedTier || info.tier.tier_name === expectedTier || attempt === maxRetries - 1) {
           setTierInfo(info);
+          
+          // Fetch family-aware resource counts if user is in a family
+          if (info.family?.isFamilyMember || info.family?.isFamilyOwner) {
+            try {
+              const counts = await getUserResourceCounts(info.user.id);
+              setResourceCounts(counts);
+              console.log('👨‍👩‍👧‍👦 Settings: Family resource counts:', counts);
+            } catch (countError) {
+              console.warn('👨‍👩‍👧‍👦 Settings: Failed to get family resource counts:', countError);
+            }
+          }
           
           const tiers = await SubscriptionTier.list('sort_order');
           setAllTiers(tiers.filter(t => t.tier_name !== 'admin'));
@@ -212,10 +227,15 @@ export default function SettingsPage() {
     );
   }
 
-  const { tier, limits, usage, user } = tierInfo;
+  const { tier, limits, usage, user, family } = tierInfo;
   const CurrentIcon = tierIcons[tier.tier_name] || Package;
   const currentGradient = tierColors[tier.tier_name];
   const upgrades = allTiers.filter(t => t.sort_order > tier.sort_order);
+  
+  // Determine display name for family members
+  const displayTierName = family?.isFamilyMember 
+    ? `Family Plan (${tier.display_name})`
+    : tier.display_name;
 
 
   return (
@@ -298,10 +318,15 @@ export default function SettingsPage() {
                     color: isDarkMode ? 'rgb(241 245 249)' : ''
                   }}
                 >
-                  {tier.display_name}
+                  {displayTierName}
                 </CardTitle>
                 <p className="text-slate-600 dark:text-slate-400">
-                  {user?.subscription_end_date ? (
+                  {family?.isFamilyMember ? (
+                    <>
+                      <Users className="w-3.5 h-3.5 inline mr-1" />
+                      Shared via {family.familyName || 'Family'}
+                    </>
+                  ) : user?.subscription_end_date ? (
                     <>Expires {new Date(user.subscription_end_date).toLocaleDateString()}</>
                   ) : tier.price_per_month === 0 ? (
                     'Free Forever'
@@ -312,7 +337,8 @@ export default function SettingsPage() {
               </div>
             </div>
             {user.subscription_tier !== 'free' && 
-             user.subscription_tier !== 'admin' && (
+             user.subscription_tier !== 'admin' && 
+             !family?.isFamilyMember && (
               <Button
                 onClick={handleManageSubscription}
                 disabled={managingSubscription}
@@ -372,14 +398,14 @@ export default function SettingsPage() {
                     className="text-xl sm:text-2xl font-bold mb-1"
                     style={{ color: isDarkMode ? 'rgb(96 165 250)' : 'rgb(37 99 235)' }}
                   >
-                    {user.current_shopping_lists || 0}/{tier.max_shopping_lists}
+                    {resourceCounts?.shopping_lists ?? user.current_shopping_lists ?? 0}/{tier.max_shopping_lists}
                   </p>
                   <p 
                     className="text-xs flex items-center justify-center gap-1"
                     style={{ color: isDarkMode ? 'rgb(148 163 184)' : 'rgb(100 116 139)' }}
                   >
                     Shopping Lists
-                    {(user.current_shopping_lists || 0) >= tier.max_shopping_lists && (
+                    {(resourceCounts?.shopping_lists ?? user.current_shopping_lists ?? 0) >= tier.max_shopping_lists && (
                       <AlertCircle className="w-3 h-3 text-red-500 dark:text-red-400" title="Limit reached" />
                     )}
                   </p>
@@ -394,14 +420,14 @@ export default function SettingsPage() {
                     className="text-xl sm:text-2xl font-bold mb-1"
                     style={{ color: isDarkMode ? 'rgb(34 197 94)' : 'rgb(22 163 74)' }}
                   >
-                    {user.current_total_items || 0}/{tier.max_total_items}
+                    {resourceCounts?.total_items ?? user.current_total_items ?? 0}/{tier.max_total_items}
                   </p>
                   <p 
                     className="text-xs flex items-center justify-center gap-1"
                     style={{ color: isDarkMode ? 'rgb(148 163 184)' : 'rgb(100 116 139)' }}
                   >
                     Total Items
-                    {(user.current_total_items || 0) >= tier.max_total_items && (
+                    {(resourceCounts?.total_items ?? user.current_total_items ?? 0) >= tier.max_total_items && (
                       <AlertCircle className="w-3 h-3 text-red-500 dark:text-red-400" title="Limit reached" />
                     )}
                   </p>
@@ -416,14 +442,14 @@ export default function SettingsPage() {
                     className="text-xl sm:text-2xl font-bold mb-1"
                     style={{ color: isDarkMode ? 'rgb(236 72 153)' : 'rgb(219 39 119)' }}
                   >
-                    {user.current_tasks || 0}/{tier.max_tasks}
+                    {resourceCounts?.tasks ?? user.current_tasks ?? 0}/{tier.max_tasks}
                   </p>
                   <p 
                     className="text-xs flex items-center justify-center gap-1"
                     style={{ color: isDarkMode ? 'rgb(148 163 184)' : 'rgb(100 116 139)' }}
                   >
                     Tasks
-                    {(user.current_tasks || 0) >= tier.max_tasks && (
+                    {(resourceCounts?.tasks ?? user.current_tasks ?? 0) >= tier.max_tasks && (
                       <AlertCircle className="w-3 h-3 text-red-500 dark:text-red-400" title="Limit reached" />
                     )}
                   </p>
@@ -438,14 +464,14 @@ export default function SettingsPage() {
                     className="text-xl sm:text-2xl font-bold mb-1"
                     style={{ color: isDarkMode ? 'rgb(251 146 60)' : 'rgb(234 88 12)' }}
                   >
-                    {user.current_custom_recipes || 0}/{tier.max_custom_recipes}
+                    {resourceCounts?.custom_recipes ?? user.current_custom_recipes ?? 0}/{tier.max_custom_recipes}
                   </p>
                   <p 
                     className="text-xs flex items-center justify-center gap-1"
                     style={{ color: isDarkMode ? 'rgb(148 163 184)' : 'rgb(100 116 139)' }}
                   >
                     Custom Recipes
-                    {(user.current_custom_recipes || 0) >= tier.max_custom_recipes && (
+                    {(resourceCounts?.custom_recipes ?? user.current_custom_recipes ?? 0) >= tier.max_custom_recipes && (
                       <AlertCircle className="w-3 h-3 text-red-500 dark:text-red-400" title="Limit reached" />
                     )}
                   </p>
@@ -464,7 +490,14 @@ export default function SettingsPage() {
                     className="text-xs font-semibold flex items-center gap-1"
                     style={{ color: isDarkMode ? 'rgb(148 163 184)' : 'rgb(100 116 139)' }}
                   >
-                    Monthly Credits Available
+                    {usage.isFamilyPool ? (
+                      <>
+                        <Users className="w-3.5 h-3.5" title="Family credit pool" />
+                        Family Credits
+                      </>
+                    ) : (
+                      'Monthly Credits Available'
+                    )}
                     {usage.creditsRemaining === 0 && (
                       <XCircle className="w-4 h-4 text-red-500 dark:text-red-400" title="No credits available" />
                     )}
@@ -481,9 +514,12 @@ export default function SettingsPage() {
                   className="text-xs mt-2"
                   style={{ color: isDarkMode ? 'rgb(148 163 184)' : 'rgb(100 116 139)' }}
                 >
-                  Resets on {user.credits_reset_date 
-                    ? new Date(user.credits_reset_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                    : new Date(new Date(user.created_date).setMonth(new Date().getMonth() + 1)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {usage.isFamilyPool 
+                    ? 'Shared with your family group'
+                    : `Resets on ${user.credits_reset_date 
+                        ? new Date(user.credits_reset_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : new Date(new Date(user.created_date).setMonth(new Date().getMonth() + 1)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                  }
                 </p>
               </div>
 
@@ -728,6 +764,17 @@ export default function SettingsPage() {
           </div>
         </>
       )}
+
+      {/* Family Sharing Section */}
+      <div className="mt-8">
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4">
+          Family & Friends
+        </h2>
+        <FamilySharing 
+          userTier={user.subscription_tier} 
+          maxFamilyMembers={tier.max_family_members || 0}
+        />
+      </div>
 
       {/* Privacy & Security Section */}
       <div className="mt-8">

@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { appCache } from "@/components/utils/appCache";
 import { trackShoppingList } from "@/utils/trackingContext";
+import { getFamilyInfo } from "@/services/familyService";
 
 import ListCard from "../components/lists/ListCard";
 import AddListDialog from "../components/lists/AddListDialog";
@@ -34,6 +35,7 @@ export default function ManageListsPage() {
   const [creatingList, setCreatingList] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [deleteListConfirm, setDeleteListConfirm] = useState({ open: false, list: null });
+  const [familyInfo, setFamilyInfo] = useState(null);
 
   useEffect(() => {
     // Check for hard refresh to ensure fresh data - only handle ONCE per session
@@ -79,7 +81,35 @@ export default function ManageListsPage() {
       }
       
       setUser(currentUser);
+      
+      // Check if user is in a family group with auto-share enabled
+      try {
+        const info = await getFamilyInfo();
+        if (info.success && info.has_family) {
+          setFamilyInfo(info);
+          logger.debug('ManageLists', 'User is in family group, share_all_lists:', info.family_group?.share_all_lists);
+        }
+      } catch (familyError) {
+        logger.debug('ManageLists', 'Could not fetch family info');
+      }
 
+      // Fetch all shopping lists - RLS will return:
+      // 1. Lists the user owns
+      // 2. Lists the user is a member of
+      // 3. Family-shared lists from family members
+      let cachedLists = appCache.getShoppingListEntities();
+      let allLists;
+      
+      if (cachedLists) {
+        logger.cache('ManageLists', 'Using cached ShoppingList entities');
+        allLists = cachedLists;
+      } else {
+        logger.cache('ManageLists', 'Fetching ShoppingList entities from API (cache miss)');
+        allLists = await ShoppingList.list();
+        appCache.setShoppingListEntities(allLists);
+      }
+      
+      // Also fetch memberships for role info (owner vs member display)
       let allMemberships = appCache.getListMemberships(currentUser.id);
       
       if (!allMemberships) {
@@ -90,24 +120,10 @@ export default function ManageListsPage() {
         logger.cache('ManageLists', 'Using cached ListMember data');
       }
       
-      const listIds = allMemberships
-        .filter(m => m.status === 'approved' || m.role === 'owner')
-        .map(m => m.list_id);
-
-      if (listIds.length > 0) {
-        let cachedLists = appCache.getShoppingListEntities();
-        let allLists;
-        
-        if (cachedLists) {
-          logger.cache('ManageLists', 'Using cached ShoppingList entities');
-          allLists = cachedLists;
-        } else {
-          logger.cache('ManageLists', 'Fetching ShoppingList entities from API (cache miss)');
-          allLists = await ShoppingList.list();
-          appCache.setShoppingListEntities(allLists);
-        }
-        
-        const userLists = allLists.filter(list => listIds.includes(list.id) && !list.archived);
+      // Filter to non-archived lists (RLS already filtered for access)
+      const userLists = allLists.filter(list => !list.archived);
+      
+      if (userLists.length > 0) {
         setLists(userLists);
 
         const counts = {};
@@ -186,6 +202,29 @@ export default function ManageListsPage() {
         role: 'owner',
         status: 'approved',
       });
+      
+      // Auto-share with family members if share_all_lists is enabled
+      if (familyInfo?.has_family && familyInfo?.family_group?.share_all_lists) {
+        const approvedMembers = familyInfo.members?.filter(
+          m => m.status === 'approved' && m.user_id !== user.id
+        ) || [];
+        
+        if (approvedMembers.length > 0) {
+          logger.debug('ManageLists', `Auto-sharing list with ${approvedMembers.length} family members`);
+          
+          await Promise.all(
+            approvedMembers.map(member =>
+              ListMember.create({
+                list_id: newList.id,
+                user_id: member.user_id,
+                user_email: member.email,
+                role: 'member',
+                status: 'approved', // Auto-approved for family
+              })
+            )
+          );
+        }
+      }
 
       // Increment shopping list count (per-user)
       await incrementUsage('current_shopping_lists');
@@ -361,6 +400,7 @@ export default function ManageListsPage() {
               itemCount={itemCounts[list.id]?.total || 0}
               doneCount={itemCounts[list.id]?.checked || 0}
               isOwner={list.owner_id === user.id}
+              isFamilyShared={list.shared_with_family && list.owner_id !== user.id}
               onClick={() => handleNavigateToList(list)}
               onDelete={() => handleDeleteList(list)}
             />

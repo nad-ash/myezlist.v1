@@ -15,6 +15,7 @@ import {
   Flame,
   Zap,
   Leaf,
+  Users,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,12 @@ export default function TodoCard({ todo, onToggleComplete, onToggleFavorite, onE
 
           {/* Badges */}
           <div className="flex flex-wrap items-center gap-2 mb-3">
+            {todo.shared_with_family && (
+              <Badge className="bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700 text-xs flex items-center gap-1">
+                <Users className="w-3 h-3" />
+                Family
+              </Badge>
+            )}
             {todo.status === 'in_progress' && (
               <Badge className="bg-blue-500 text-white text-xs hover:bg-blue-600">
                 In Progress

@@ -60,6 +60,9 @@ export const EncryptedTodo = {
   /**
    * Update a task with encrypted sensitive fields
    * 
+   * NOTE: If shared_with_family is being set to true, the task title/description
+   * will be stored unencrypted so family members can read them.
+   * 
    * @param {string} id - Task ID
    * @param {Object} taskData - Fields to update
    * @param {string} userId - User's Supabase UUID for encryption key
@@ -67,11 +70,21 @@ export const EncryptedTodo = {
    * @returns {Promise<Object>} - Updated task
    */
   async update(id, taskData, userId, trackingContext) {
-    // Encrypt any sensitive fields being updated
-    const encryptedData = await encryptTaskForStorage(taskData, userId);
+    let dataToStore = taskData;
+    
+    // If toggling to family-shared, ensure title/description are plaintext (not encrypted)
+    // This allows family members to read the task
+    if (taskData.shared_with_family === true) {
+      // Decrypt any encrypted fields first, then store as plaintext
+      dataToStore = await decryptTaskFromStorage(taskData, userId);
+      console.log('👨‍👩‍👧‍👦 Task being shared with family - storing unencrypted');
+    } else {
+      // Encrypt any sensitive fields being updated (for private tasks)
+      dataToStore = await encryptTaskForStorage(taskData, userId);
+    }
     
     // Update in database
-    const result = await Todo.update(id, encryptedData, trackingContext);
+    const result = await Todo.update(id, dataToStore, trackingContext);
     
     // Return with decrypted fields for immediate UI use
     return decryptTaskFromStorage(result, userId);
