@@ -83,6 +83,15 @@ DECLARE
     v_subscription record;
     v_result jsonb;
 BEGIN
+    -- Security check: only allow users to query their own subscription (admins can query any)
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Not authenticated';
+    END IF;
+    
+    IF auth.uid() != p_user_id AND NOT is_admin() THEN
+        RAISE EXCEPTION 'Unauthorized: cannot access another user''s subscription';
+    END IF;
+    
     -- Get subscription record
     SELECT * INTO v_subscription
     FROM public.user_subscriptions
