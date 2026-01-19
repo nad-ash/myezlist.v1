@@ -104,8 +104,9 @@ export async function consumeCredits(featureKey, description, metadata = {}) {
     
     try {
       consumeResult = await consumeFamilyCredits(user.id, feature.credits_per_use, featureKey);
-      isFamilyPool = true; // If we get here, we used the RPC function
-      console.log('👨‍👩‍👧‍👦 creditManager: Family credits consumed:', consumeResult);
+      // Use is_family_pool from RPC response (handles both family pool and individual credits)
+      isFamilyPool = consumeResult.is_family_pool || false;
+      console.log('👨‍👩‍👧‍👦 creditManager: Credits consumed:', consumeResult);
       
       if (!consumeResult.success) {
         return {
