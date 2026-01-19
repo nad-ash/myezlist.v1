@@ -92,7 +92,7 @@ serve(async (req) => {
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .update({ 
-        tier: "premium",
+        subscription_tier: "premium",
         updated_at: new Date().toISOString()
       })
       .eq("id", user.id);

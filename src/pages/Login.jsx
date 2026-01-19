@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,9 @@ export default function Login() {
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState("");
   const [signUpFullName, setSignUpFullName] = useState("");
 
+  // Track if OAuth flow is in progress (for native app resume handling)
+  const oauthInProgress = useRef(false);
+
   // Check if user is already logged in
   useEffect(() => {
     const checkAuth = async () => {
@@ -44,6 +47,45 @@ export default function Login() {
     };
     checkAuth();
   }, [navigate]);
+
+  // Handle native app resume - reset loading state if OAuth was cancelled
+  useEffect(() => {
+    if (!isNativeApp()) return;
+
+    let appListener = null;
+
+    const setupAppListener = async () => {
+      try {
+        const { App } = await import('@capacitor/app');
+        appListener = await App.addListener('appStateChange', async ({ isActive }) => {
+          if (isActive && oauthInProgress.current) {
+            // App resumed - give time for deep link to process and session to establish
+            // 2 seconds accounts for: deep link routing + token exchange + session creation
+            // If we're still here after the delay, OAuth was likely cancelled
+            setTimeout(async () => {
+              // Check if user got authenticated via deep link
+              const session = await supabaseAuth.getSession();
+              if (!session) {
+                // No session means OAuth was cancelled or failed
+                oauthInProgress.current = false;
+                setIsLoading(false);
+              }
+            }, 2000);
+          }
+        });
+      } catch (err) {
+        // App plugin not available, ignore
+      }
+    };
+
+    setupAppListener();
+
+    return () => {
+      if (appListener) {
+        appListener.remove();
+      }
+    };
+  }, []);
 
   const handleSignIn = async (e) => {
     e.preventDefault();
@@ -112,6 +154,11 @@ export default function Login() {
       const callbackUrl = isNativeApp()
         ? `myezlist://auth/callback?redirect=${encodeURIComponent(storedRedirect)}`
         : `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(storedRedirect)}`;
+      
+      // Track OAuth in progress for native app resume handling
+      if (isNativeApp()) {
+        oauthInProgress.current = true;
+      }
         
       await supabaseAuth.signInWithOAuth(provider, callbackUrl);
       
@@ -119,6 +166,7 @@ export default function Login() {
       // On web, the browser will redirect automatically
     } catch (err) {
       setError(err.message || `Failed to sign in with ${provider}`);
+      oauthInProgress.current = false;
       setIsLoading(false);
     }
   };

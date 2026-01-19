@@ -98,11 +98,15 @@ export const EncryptedTodo = {
    * 
    * @param {string} id - Task ID
    * @param {string} userId - User's Supabase UUID for decryption key
-   * @returns {Promise<Object>} - Decrypted task
+   * @returns {Promise<Object|null>} - Decrypted task or null if not found
    */
   async get(id, userId) {
-    const encryptedTask = await Todo.get(id);
-    return decryptTaskFromStorage(encryptedTask, userId);
+    // Use filter since SupabaseEntity doesn't have a get() method
+    const results = await Todo.filter({ id });
+    if (!results || results.length === 0) {
+      return null;
+    }
+    return decryptTaskFromStorage(results[0], userId);
   },
 
   /**

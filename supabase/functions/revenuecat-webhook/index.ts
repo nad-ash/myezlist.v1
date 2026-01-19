@@ -32,9 +32,19 @@ serve(async (req) => {
   }
 
   try {
-    // Verify webhook secret
+    // Verify webhook secret - SECURITY: Always require authentication
+    // If the secret is not configured, reject ALL requests to prevent
+    // attackers from sending fake webhook events
+    if (!REVENUECAT_WEBHOOK_SECRET) {
+      console.error("REVENUECAT_WEBHOOK_SECRET is not configured - rejecting request");
+      return new Response(
+        JSON.stringify({ error: "Webhook not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const authHeader = req.headers.get("Authorization");
-    if (REVENUECAT_WEBHOOK_SECRET && authHeader !== `Bearer ${REVENUECAT_WEBHOOK_SECRET}`) {
+    if (authHeader !== `Bearer ${REVENUECAT_WEBHOOK_SECRET}`) {
       console.error("Invalid webhook secret");
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
@@ -190,7 +200,7 @@ async function updateSubscriptionStatus(
   const { error: profileError } = await supabase
     .from("profiles")
     .update({ 
-      tier: data.tier,
+      subscription_tier: data.tier,
       updated_at: new Date().toISOString()
     })
     .eq("id", userId);
