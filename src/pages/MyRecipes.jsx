@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { appCache } from "@/components/utils/appCache";
 import { incrementUsage } from "@/components/utils/usageSync";
 import { useRecipeLoadingPhrases } from "@/hooks/useRecipeLoadingPhrases";
+import { checkCreditsAvailable, consumeCredits } from "@/components/utils/creditManager";
 
 const allCuisines = [
   "Italian", "Indian / Pakistani", "Chinese", "Mexican", "French", "Japanese",
@@ -122,7 +123,8 @@ export default function MyRecipesPage() {
         if (familyInfo.success && familyInfo.has_family && familyInfo.members) {
           // Get all approved family members
           const approvedMembers = familyInfo.members.filter(m => m.status === 'approved');
-          familyUserIds = approvedMembers.map(m => m.user_id);
+          // Always include current user + approved family members (use Set to avoid duplicates)
+          familyUserIds = [...new Set([currentUser.id, ...approvedMembers.map(m => m.user_id)])];
           
           // Create a map of userId -> display name for badges
           approvedMembers.forEach(m => {
@@ -200,8 +202,33 @@ export default function MyRecipesPage() {
   const handleGenerateRecipe = async () => {
     setError(null);
     if (!searchTerm.trim()) { alert('Please enter a dish name'); return; }
+    
+    // Check credits before generation
+    try {
+      const creditCheck = await checkCreditsAvailable('recipe_generation');
+      if (!creditCheck.hasCredits) {
+        alert(`Insufficient credits. Need ${creditCheck.creditsNeeded} but only have ${creditCheck.creditsAvailable}. Go to Settings to manage your subscription.`);
+        return;
+      }
+    } catch (creditError) {
+      console.error("Error checking credits:", creditError);
+      alert("Unable to verify credits. Please try again.");
+      return;
+    }
+    
     setGenerating(true); setGenerationStage('recipe');
     try {
+      // Consume credits before expensive operation
+      const creditResult = await consumeCredits('recipe_generation', {
+        description: `Generated recipe: "${searchTerm.trim()}"`
+      });
+
+      if (!creditResult.success) {
+        alert(creditResult.message);
+        setGenerating(false);
+        return;
+      }
+      
       const recipePrompt = `Generate a detailed recipe for: "${searchTerm}". Return JSON with these exact fields:
 - full_title: string (the complete dish name)
 - cooking_time: string (e.g. "30-45 minutes")
