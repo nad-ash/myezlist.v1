@@ -25,7 +25,7 @@ export default function PrivacyPolicy() {
           </div>
           
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-8">
-            Last Updated: November 25, 2025
+            Last Updated: January 18, 2026
           </p>
 
           <div className="prose prose-slate dark:prose-invert max-w-none">
@@ -220,6 +220,22 @@ export default function PrivacyPolicy() {
               <p className="text-slate-600 dark:text-slate-300 mb-4">
                 However, no method of storage or transmission is 100% secure.
               </p>
+
+              <h3 className="text-lg font-medium text-slate-700 dark:text-slate-200 mb-3">Client-Side Encryption</h3>
+              <p className="text-slate-600 dark:text-slate-300 mb-4">
+                Certain user content, including task titles and descriptions, is encrypted on your device before being transmitted to our servers using industry-standard encryption.
+              </p>
+              <ul className="list-disc pl-6 text-slate-600 dark:text-slate-300 mb-4 space-y-2">
+                <li>Encryption occurs locally on your device before data reaches our servers</li>
+                <li>We cannot read, access, or decrypt your encrypted content</li>
+                <li>Only you can view your encrypted task data when logged into your account</li>
+                <li>Some metadata (e.g., due dates, timestamps) remains unencrypted to enable core features like notifications</li>
+              </ul>
+              <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
+                <p className="text-amber-800 dark:text-amber-200 font-medium">
+                  ⚠️ Important: If you lose access to your account, your encrypted content cannot be recovered. We recommend keeping backups of critical information elsewhere.
+                </p>
+              </div>
 
               <h3 className="text-lg font-medium text-slate-700 dark:text-slate-200 mb-3">Data Breach Notification</h3>
               <p className="text-slate-600 dark:text-slate-300">

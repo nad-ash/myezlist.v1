@@ -27,6 +27,7 @@ import { createCheckoutSession } from "@/api/functions";
 import { createCustomerPortal } from "@/api/functions";
 import { appCache } from "@/components/utils/appCache";
 import { isNativeApp } from "@/utils/paymentPlatform";
+import TaskEncryptionMigration from "@/components/settings/TaskEncryptionMigration";
 
 const tierIcons = {
   free: Package,
@@ -727,6 +728,14 @@ export default function SettingsPage() {
           </div>
         </>
       )}
+
+      {/* Privacy & Security Section */}
+      <div className="mt-8">
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4">
+          Privacy & Security
+        </h2>
+        <TaskEncryptionMigration />
+      </div>
 
       {/* Legal Section */}
       <div className="mt-8">
