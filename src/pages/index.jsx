@@ -12,6 +12,8 @@ import ImportList from "./ImportList";
 
 import JoinListViaLink from "./JoinListViaLink";
 
+import JoinFamily from "./JoinFamily";
+
 import MasterItemList from "./MasterItemList";
 
 import Admin from "./Admin";
@@ -75,6 +77,8 @@ const PAGES = {
     ImportList: ImportList,
     
     JoinListViaLink: JoinListViaLink,
+    
+    JoinFamily: JoinFamily,
     
     MasterItemList: MasterItemList,
     
@@ -162,6 +166,10 @@ function PagesContent() {
                 <Route path="/ImportList" element={<ImportList />} />
                 
                 <Route path="/JoinListViaLink" element={<JoinListViaLink />} />
+                
+                <Route path="/join-family" element={<JoinFamily />} />
+                
+                <Route path="/JoinFamily" element={<JoinFamily />} />
                 
                 <Route path="/MasterItemList" element={<MasterItemList />} />
                 
