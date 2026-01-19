@@ -25,7 +25,7 @@ export default function Terms() {
           </div>
           
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-8">
-            Last Updated: November 25, 2025
+            Last Updated: January 18, 2026
           </p>
 
           <div className="prose prose-slate dark:prose-invert max-w-none">
@@ -173,9 +173,24 @@ export default function Terms() {
               <p className="text-slate-600 dark:text-slate-300 mb-2">
                 You retain ownership of the content you create (e.g., lists, tasks, recipes).
               </p>
-              <p className="text-slate-600 dark:text-slate-300">
+              <p className="text-slate-600 dark:text-slate-300 mb-4">
                 You grant us a limited license to store, process, and display your content solely to operate the Service.
               </p>
+
+              <h3 className="text-lg font-medium text-slate-700 dark:text-slate-200 mb-3">7.3 Encrypted Content</h3>
+              <p className="text-slate-600 dark:text-slate-300 mb-4">
+                Certain content within the Service (such as task titles and descriptions) is encrypted on your device using industry-standard encryption before being transmitted to our servers.
+              </p>
+              <ul className="list-disc pl-6 text-slate-600 dark:text-slate-300 mb-4 space-y-2">
+                <li>We cannot read, access, or decrypt your encrypted content</li>
+                <li>Only you can view this content when logged into your account</li>
+                <li>Some metadata (e.g., due dates, timestamps) remains unencrypted to enable core functionality</li>
+              </ul>
+              <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                <p className="text-amber-800 dark:text-amber-200 font-medium">
+                  ⚠️ Important: If you lose access to your account, your encrypted content cannot be recovered by us or any third party. You are solely responsible for maintaining access to your account and backing up critical information.
+                </p>
+              </div>
             </section>
 
             <section className="mb-8">

@@ -48,6 +48,51 @@ const TIER_CONFIG: Record<string, { monthly_credits: number }> = {
 };
 
 /**
+ * Sync subscription to unified user_subscriptions table
+ * This keeps subscriptions from all providers (Stripe, Apple, Google) in sync
+ */
+async function syncToUserSubscriptions(
+  supabaseClient: any,
+  userId: string,
+  data: {
+    status: string;
+    tier: string;
+    stripeCustomerId?: string;
+    stripeSubscriptionId?: string | null;
+    priceId?: string;
+    currentPeriodEnd?: Date | null;
+    cancelledAt?: Date | null;
+  }
+) {
+  try {
+    const { error } = await supabaseClient
+      .from("user_subscriptions")
+      .upsert({
+        user_id: userId,
+        payment_provider: "stripe",
+        status: data.status,
+        tier: data.tier,
+        stripe_customer_id: data.stripeCustomerId,
+        stripe_subscription_id: data.stripeSubscriptionId,
+        price_id: data.priceId,
+        current_period_end: data.currentPeriodEnd?.toISOString() || null,
+        cancelled_at: data.cancelledAt?.toISOString() || null,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: "user_id"
+      });
+
+    if (error) {
+      console.error("Failed to sync to user_subscriptions:", error);
+    } else {
+      console.log(`Synced to user_subscriptions: user ${userId}, status ${data.status}`);
+    }
+  } catch (err) {
+    console.error("Error syncing to user_subscriptions:", err);
+  }
+}
+
+/**
  * Find user ID by stripe_customer_id as a fallback
  */
 async function findUserByCustomerId(supabaseClient: any, customerId: string): Promise<string | null> {
@@ -195,6 +240,18 @@ serve(async (req) => {
         } else {
           console.log(`SUCCESS: User ${userId} upgraded to ${tier}`);
           console.log(`Update result:`, JSON.stringify(updateData));
+          
+          // Sync to unified user_subscriptions table
+          await syncToUserSubscriptions(supabaseClient, userId, {
+            status: "active",
+            tier,
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: subscriptionId,
+            priceId,
+            currentPeriodEnd: subscription.current_period_end 
+              ? new Date(subscription.current_period_end * 1000) 
+              : null
+          });
         }
         break;
       }
@@ -304,6 +361,19 @@ serve(async (req) => {
           console.error(`FAILED to update subscription for user ${userId}:`, updateError);
         } else {
           console.log(`SUCCESS: User ${userId} subscription updated`, updateData);
+          
+          // Sync to unified user_subscriptions table
+          await syncToUserSubscriptions(supabaseClient, userId, {
+            status: isCanceled ? "expired" : (isCanceledAtPeriodEnd ? "cancelled" : "active"),
+            tier: isCanceled ? "free" : (tier || "free"),
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: isCanceled ? null : subscription.id,
+            priceId,
+            currentPeriodEnd: subscription.current_period_end 
+              ? new Date(subscription.current_period_end * 1000) 
+              : null,
+            cancelledAt: canceledAt ? new Date(canceledAt * 1000) : null
+          });
         }
         break;
       }
@@ -336,6 +406,16 @@ serve(async (req) => {
           console.error(`FAILED to downgrade user ${userId}:`, updateError);
         } else {
           console.log(`SUCCESS: User ${userId} subscription canceled, downgraded to free`);
+          
+          // Sync to unified user_subscriptions table
+          await syncToUserSubscriptions(supabaseClient, userId, {
+            status: "expired",
+            tier: "free",
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: null,
+            currentPeriodEnd: null,
+            cancelledAt: new Date()
+          });
         }
         break;
       }

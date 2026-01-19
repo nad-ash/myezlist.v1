@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { User, Todo as TodoEntity } from "@/api/entities";
+import { User } from "@/api/entities";
+import { EncryptedTodo } from "@/api/encryptedTodoEntity";
 import { updateStatCount } from "@/api/functions";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CheckCircle2, ChevronDown, ChevronRight, Home, Briefcase, User as UserIcon, ShoppingBag, Users, Heart, DollarSign, MoreHorizontal, Loader2 } from "lucide-react";
+import { Plus, CheckCircle2, ChevronDown, ChevronRight, Home, Briefcase, User as UserIcon, ShoppingBag, Users, Heart, DollarSign, MoreHorizontal, Loader2, Shield, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { createPageUrl } from "@/utils";
@@ -56,7 +57,16 @@ export default function TodosPage() {
   const [user, setUser] = useState(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isColorfulTheme, setIsColorfulTheme] = useState(false);
+  const [showSecurityNotice, setShowSecurityNotice] = useState(() => {
+    // Check if user has dismissed the notice before
+    return localStorage.getItem('tasks_security_notice_dismissed') !== 'true';
+  });
   const queryClient = useQueryClient();
+
+  const dismissSecurityNotice = () => {
+    setShowSecurityNotice(false);
+    localStorage.setItem('tasks_security_notice_dismissed', 'true');
+  };
 
   // Check authentication on mount
   useEffect(() => {
@@ -102,14 +112,17 @@ export default function TodosPage() {
   };
 
   // CRITICAL FIX: Filter todos by current user's email
+  // Uses EncryptedTodo which automatically decrypts title/description
   const { data: todos = [], isLoading } = useQuery({
     queryKey: ['todos', user?.email],
-    queryFn: () => TodoEntity.filter({ created_by: user.email }, '-created_date'),
-    enabled: !!user && !!user.email,
+    queryFn: () => EncryptedTodo.filter({ created_by: user.email }, user.id, '-created_date'),
+    enabled: !!user && !!user.email && !!user.id,
   });
 
+  // Mutations use EncryptedTodo which encrypts title/description before storage
   const createTodoMutation = useMutation({
-    mutationFn: ({ todoData, trackingContext }) => TodoEntity.create(todoData, trackingContext),
+    mutationFn: ({ todoData, trackingContext }) => 
+      EncryptedTodo.create(todoData, user.id, trackingContext),
     onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ['todos'] });
       setShowAddDialog(false);
@@ -130,7 +143,8 @@ export default function TodosPage() {
   });
 
   const updateTodoMutation = useMutation({
-    mutationFn: ({ id, todoData, trackingContext }) => TodoEntity.update(id, todoData, trackingContext),
+    mutationFn: ({ id, todoData, trackingContext }) => 
+      EncryptedTodo.update(id, todoData, user.id, trackingContext),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['todos'] });
       setShowAddDialog(false);
@@ -139,7 +153,7 @@ export default function TodosPage() {
   });
 
   const deleteTodoMutation = useMutation({
-    mutationFn: ({ id, trackingContext }) => TodoEntity.delete(id, trackingContext),
+    mutationFn: ({ id, trackingContext }) => EncryptedTodo.delete(id, trackingContext),
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['todos'] });
 
@@ -339,6 +353,35 @@ export default function TodosPage() {
             </div>
           </div>
         </div>
+
+        {/* Security Notice Banner */}
+        {showSecurityNotice && (
+          <div className="mb-6 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200 dark:border-emerald-700 rounded-xl p-4 relative">
+            <button 
+              onClick={dismissSecurityNotice}
+              className="absolute top-3 right-3 p-1.5 text-emerald-700 bg-emerald-200 dark:text-white dark:bg-emerald-700 hover:bg-emerald-300 dark:hover:bg-emerald-600 rounded-full transition-colors"
+              aria-label="Dismiss notice"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-start gap-3 pr-8">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center flex-shrink-0">
+                <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-emerald-800 dark:text-emerald-200 mb-1">
+                  Your Tasks Are Private & Encrypted
+                </h3>
+                <p className="text-sm text-emerald-700 dark:text-emerald-300 leading-relaxed">
+                  Your task titles and descriptions are encrypted — only you can see them. Even we can't read what you write! 
+                  <span className="block mt-1 text-emerald-600 dark:text-emerald-400">
+                    💡 <strong>Tip:</strong> While your tasks are secure, we recommend not storing sensitive information like passwords, credit card numbers, or personal IDs in your tasks.
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Progress Bar */}
         {todos.length > 0 && (

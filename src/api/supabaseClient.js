@@ -1,4 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import { isNativeApp } from '@/utils/paymentPlatform';
+
+// Custom URL scheme for native app deep linking
+const NATIVE_URL_SCHEME = 'myezlist';
 
 // Supabase configuration
 // TODO: Replace with your Supabase project credentials
@@ -168,15 +172,31 @@ export const supabaseAuth = {
    * @param {string} redirectTo - URL to redirect after OAuth
    */
   signInWithOAuth: async (provider, redirectTo) => {
+    // For native apps, use custom URL scheme for callback
+    const isNative = isNativeApp();
+    const defaultRedirect = isNative
+      ? `${NATIVE_URL_SCHEME}://auth/callback`
+      : window.location.origin + '/auth/callback';
+
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: redirectTo || window.location.origin + '/auth/callback'
+        redirectTo: redirectTo || defaultRedirect,
+        skipBrowserRedirect: isNative // Important: don't auto-redirect on native
       }
     });
 
     if (error) {
       throw error;
+    }
+
+    // For native apps, open the OAuth URL in the system browser
+    if (isNative && data?.url) {
+      const { Browser } = await import('@capacitor/browser');
+      await Browser.open({ 
+        url: data.url,
+        windowName: '_self'
+      });
     }
 
     return data;
