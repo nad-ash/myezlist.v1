@@ -54,7 +54,7 @@ export async function checkCreditsAvailable(featureKey) {
         creditsNeeded: feature.credits_per_use,
         creditsAvailable,
         isFamilyPool: creditsInfo.is_family_pool,
-        message: `This feature requires ${feature.credits_per_use} credits, but ${poolType.toLowerCase()} only ${creditsInfo.is_family_pool ? 'have' : 'have'} ${creditsAvailable} remaining. Upgrade your plan or wait for your monthly credit reset.`
+        message: `This feature requires ${feature.credits_per_use} credits, but ${poolType.toLowerCase()} only ${creditsInfo.is_family_pool ? 'has' : 'have'} ${creditsAvailable} remaining. Upgrade your plan or wait for your monthly credit reset.`
       };
     }
     
