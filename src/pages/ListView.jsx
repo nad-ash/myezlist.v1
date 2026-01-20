@@ -46,6 +46,7 @@ export default function ListViewPage() {
   const [user, setUser] = useState(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [initialItemName, setInitialItemName] = useState(""); // For pre-populating AddItemDialog
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [loading, setLoading] = useState(true);
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -486,6 +487,23 @@ export default function ListViewPage() {
   const closeDialog = () => {
     setShowAddDialog(false);
     setEditingItem(null);
+    setInitialItemName("");
+  };
+
+  // Handler for opening Add Item dialog with pre-populated name (from insufficient credits flow)
+  const handleOpenManualAdd = async (prefilledName = "") => {
+    // Check tier limits before opening dialog
+    const tierCheck = await canAddItem();
+    if (!tierCheck.canAdd) {
+      setUpgradeTitle("Item Limit Reached");
+      setUpgradeMessage(tierCheck.message);
+      setShowUpgradePrompt(true);
+      return;
+    }
+    
+    setEditingItem(null);
+    setInitialItemName(prefilledName);
+    setShowAddDialog(true);
   };
 
   const handleDeleteList = () => {
@@ -820,7 +838,12 @@ export default function ListViewPage() {
       </div>
 
       {/* Fast Add Input */}
-      <FastAddItemInput listId={listId} existingItems={items} onItemAdded={loadData} />
+      <FastAddItemInput 
+        listId={listId} 
+        existingItems={items} 
+        onItemAdded={loadData} 
+        onOpenManualAdd={handleOpenManualAdd}
+      />
 
       {/* Add Item Button */}
       <Button
@@ -937,6 +960,7 @@ export default function ListViewPage() {
         onSave={editingItem ? handleEditItem : handleAddItem}
         listSections={list.store_sections}
         editItem={editingItem}
+        initialItemName={initialItemName}
       />
       <ShareDialog
         open={showShareDialog}

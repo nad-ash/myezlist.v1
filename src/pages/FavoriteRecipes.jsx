@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { appCache } from "@/components/utils/appCache";
 import { useRecipeLoadingPhrases } from "@/hooks/useRecipeLoadingPhrases";
 import { checkCreditsAvailable, consumeCredits } from "@/components/utils/creditManager";
+import InsufficientCreditsDialog from "@/components/common/InsufficientCreditsDialog";
 
 const allCuisines = [
   "Italian", "Indian / Pakistani", "Chinese", "Mexican", "French", "Japanese",
@@ -53,6 +54,13 @@ export default function FavoriteRecipesPage() {
   const [generatingManualImage, setGeneratingManualImage] = useState(false);
   const [manualImageOptions, setManualImageOptions] = useState([]);
   const [selectedManualImage, setSelectedManualImage] = useState(null);
+  
+  // Insufficient credits dialog state
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
+  const [insufficientCreditsInfo, setInsufficientCreditsInfo] = useState({
+    creditsNeeded: 0,
+    creditsAvailable: 0
+  });
 
   useEffect(() => {
     checkAuth();
@@ -162,7 +170,11 @@ export default function FavoriteRecipesPage() {
     try {
       const creditCheck = await checkCreditsAvailable('recipe_generation');
       if (!creditCheck.hasCredits) {
-        alert(`Insufficient credits. Need ${creditCheck.creditsNeeded} but only have ${creditCheck.creditsAvailable}. Go to Settings to manage your subscription.`);
+        setInsufficientCreditsInfo({
+          creditsNeeded: creditCheck.creditsNeeded,
+          creditsAvailable: creditCheck.creditsAvailable
+        });
+        setShowInsufficientCredits(true);
         return;
       }
     } catch (creditError) {
@@ -548,6 +560,14 @@ Do NOT use "description", "step_number", "name", or any other property names for
           )}
         </TabsContent>
       </Tabs>
+
+      <InsufficientCreditsDialog
+        open={showInsufficientCredits}
+        onClose={() => setShowInsufficientCredits(false)}
+        creditsNeeded={insufficientCreditsInfo.creditsNeeded}
+        creditsAvailable={insufficientCreditsInfo.creditsAvailable}
+        featureName="AI Recipe Generation"
+      />
     </div>
   );
 }

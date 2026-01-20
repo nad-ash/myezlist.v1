@@ -49,7 +49,7 @@ const capitalizeWords = (str) => {
   return str.replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
-export default function AddItemDialog({ open, onClose, onSave, listSections, editItem = null }) {
+export default function AddItemDialog({ open, onClose, onSave, listSections, editItem = null, initialItemName = "" }) {
   const [item, setItem] = useState({
     name: "",
     quantity: "",
@@ -89,10 +89,24 @@ export default function AddItemDialog({ open, onClose, onSave, listSections, edi
       });
       setSelectedGenerated(null);
       setGeneratedImages([]);
+    } else if (initialItemName && open) {
+      // Pre-populate with the initial item name (from insufficient credits flow)
+      const isOrganic = /\borganic\b/gi.test(initialItemName);
+      setItem({
+        name: initialItemName,
+        quantity: "",
+        category: "Other",
+        brand: "",
+        size_notes: "",
+        photo_url: "",
+        is_organic: isOrganic,
+      });
+      setSelectedGenerated(null);
+      setGeneratedImages([]);
     } else {
       resetForm();
     }
-  }, [editItem, open]);
+  }, [editItem, open, initialItemName]);
 
   const loadCache = async () => {
     setLoadingCache(true);
@@ -225,8 +239,20 @@ export default function AddItemDialog({ open, onClose, onSave, listSections, edi
         // Check if an exact match exists in cache after typing
         const match = commonItemsCache.find(ci => ci.name === normalized || ci.display_name.toLowerCase() === normalized);
         
-        if (!match) { // If no exact match found in cache, then auto-categorize
-          await autoCategorizItem(item.name);
+        if (!match) { 
+          // If no exact match found in cache, check if credits are available before auto-categorizing
+          // This prevents unnecessary credit consumption when user has no credits
+          try {
+            const creditCheck = await checkCreditsAvailable('fast_add_ai');
+            if (creditCheck.hasCredits) {
+              // Only auto-categorize if credits are available
+              await autoCategorizItem(item.name);
+            }
+            // If no credits, silently skip auto-categorization - user can manually select category
+          } catch (error) {
+            console.warn("Could not check credits for auto-categorization:", error);
+            // Skip auto-categorization on error
+          }
         } else { // If exact match found, apply its category and photo
           setItem(prev => ({
             ...prev,
