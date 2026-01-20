@@ -70,18 +70,10 @@ export const EncryptedTodo = {
    * @returns {Promise<Object>} - Updated task
    */
   async update(id, taskData, userId, trackingContext) {
-    let dataToStore = taskData;
-    
-    // If toggling to family-shared, ensure title/description are plaintext (not encrypted)
-    // This allows family members to read the task
-    if (taskData.shared_with_family === true) {
-      // Decrypt any encrypted fields first, then store as plaintext
-      dataToStore = await decryptTaskFromStorage(taskData, userId);
-      console.log('👨‍👩‍👧‍👦 Task being shared with family - storing unencrypted');
-    } else {
-      // Encrypt any sensitive fields being updated (for private tasks)
-      dataToStore = await encryptTaskForStorage(taskData, userId);
-    }
+    // Encrypt sensitive fields for storage
+    // Note: encryptTaskForStorage already handles family-shared tasks by skipping
+    // encryption (see taskEncryption.js lines 199-204), so no special case needed here
+    const dataToStore = await encryptTaskForStorage(taskData, userId);
     
     // Update in database
     const result = await Todo.update(id, dataToStore, trackingContext);

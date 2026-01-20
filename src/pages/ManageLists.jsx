@@ -202,35 +202,41 @@ export default function ManageListsPage() {
         role: 'owner',
         status: 'approved',
       });
-      
-      // Auto-share with family members if share_all_lists is enabled
-      if (familyInfo?.has_family && familyInfo?.family_group?.share_all_lists) {
-        const approvedMembers = familyInfo.members?.filter(
-          m => m.status === 'approved' && m.user_id !== user.id
-        ) || [];
-        
-        if (approvedMembers.length > 0) {
-          logger.debug('ManageLists', `Auto-sharing list with ${approvedMembers.length} family members`);
-          
-          await Promise.all(
-            approvedMembers.map(member =>
-              ListMember.create({
-                list_id: newList.id,
-                user_id: member.user_id,
-                user_email: member.email,
-                role: 'member',
-                status: 'approved', // Auto-approved for family
-              })
-            )
-          );
-        }
-      }
 
-      // Increment shopping list count (per-user)
+      // Increment shopping list count (per-user) - do this immediately after successful list creation
       await incrementUsage('current_shopping_lists');
       
       // Update statistics - atomic increment total_lists (global)
       await updateStatCount('total_lists', 1);
+
+      // Auto-share with family members if share_all_lists is enabled
+      // Wrapped in its own try-catch so failures don't affect the list creation success
+      if (familyInfo?.has_family && familyInfo?.family_group?.share_all_lists) {
+        try {
+          const approvedMembers = familyInfo.members?.filter(
+            m => m.status === 'approved' && m.user_id !== user.id
+          ) || [];
+          
+          if (approvedMembers.length > 0) {
+            logger.debug('ManageLists', `Auto-sharing list with ${approvedMembers.length} family members`);
+            
+            await Promise.all(
+              approvedMembers.map(member =>
+                ListMember.create({
+                  list_id: newList.id,
+                  user_id: member.user_id,
+                  user_email: member.email,
+                  role: 'member',
+                  status: 'approved', // Auto-approved for family
+                })
+              )
+            );
+          }
+        } catch (shareError) {
+          // Log but don't fail - list was created successfully, family sharing is a bonus
+          console.warn('Failed to auto-share list with family members:', shareError);
+        }
+      }
 
       logger.cache('ManageLists', 'Clearing caches (list created)');
       appCache.clearShoppingListEntities();

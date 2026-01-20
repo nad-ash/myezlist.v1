@@ -174,9 +174,10 @@ export default function FavoriteRecipesPage() {
     setGenerating(true); setGenerationStage('recipe');
     try {
       // Consume credits before expensive operation
-      const creditResult = await consumeCredits('recipe_generation', {
-        description: `Generated recipe: "${searchTerm.trim()}"`
-      });
+      const creditResult = await consumeCredits(
+        'recipe_generation',
+        `Generated recipe: "${searchTerm.trim()}"`
+      );
 
       if (!creditResult.success) {
         alert(creditResult.message);
