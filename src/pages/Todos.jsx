@@ -580,6 +580,7 @@ export default function TodosPage() {
         onSave={handleSubmit}
         editTodo={editingTodo}
         isInFamily={isInFamily}
+        isOwner={!editingTodo || editingTodo.created_by === user?.email}
       />
 
       <UpgradePrompt
