@@ -109,18 +109,25 @@ export default function TodosPage() {
       setUser(currentUser);
       
       // Check if user is in a family group and get family_group_id for encryption
+      // SECURITY: Both isInFamily AND familyGroupId must be set together
+      // to prevent showing "Share with Family" toggle without a valid encryption key
       try {
         const familyInfo = await getFamilyInfo();
-        if (familyInfo.success && familyInfo.has_family) {
+        if (familyInfo.success && familyInfo.has_family && familyInfo.family_group?.id) {
+          // Only enable family sharing if we have a valid family_group_id for encryption
           setIsInFamily(true);
-          // Store family_group_id for encryption of family-shared tasks
-          if (familyInfo.family_group?.id) {
-            setFamilyGroupId(familyInfo.family_group.id);
-            console.log('👨‍👩‍👧‍👦 Todos: User is in family group:', familyInfo.family_group.id);
-          }
+          setFamilyGroupId(familyInfo.family_group.id);
+          console.log('👨‍👩‍👧‍👦 Todos: User is in family group:', familyInfo.family_group.id);
+        } else if (familyInfo.success && familyInfo.has_family) {
+          // Edge case: user has family but no family_group_id - treat as not in family
+          console.warn('👨‍👩‍👧‍👦 Todos: User has family but missing family_group_id - disabling family sharing to prevent unencrypted storage');
+          setIsInFamily(false);
+          setFamilyGroupId(null);
         }
       } catch (familyError) {
         console.warn('👨‍👩‍👧‍👦 Todos: Could not check family status');
+        setIsInFamily(false);
+        setFamilyGroupId(null);
       }
     } catch (error) {
       console.error("Authentication required:", error);
@@ -622,6 +629,7 @@ export default function TodosPage() {
         onSave={handleSubmit}
         editTodo={editingTodo}
         isInFamily={isInFamily}
+        familyGroupId={familyGroupId}
         isOwner={!editingTodo || editingTodo.created_by === user?.email}
       />
 

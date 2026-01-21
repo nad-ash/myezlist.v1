@@ -54,7 +54,7 @@ const statuses = [
   { value: "completed", label: "Completed" },
 ];
 
-export default function AddTodoDialog({ open, onClose, onSave, editTodo = null, isInFamily = false, isOwner = true }) {
+export default function AddTodoDialog({ open, onClose, onSave, editTodo = null, isInFamily = false, familyGroupId = null, isOwner = true }) {
   const [todo, setTodo] = useState({
     title: "",
     description: "",
@@ -258,9 +258,10 @@ export default function AddTodoDialog({ open, onClose, onSave, editTodo = null, 
             </div>
           </div>
 
-          {/* Family Sharing Toggle - only show if user is in a family AND owns the task */}
+          {/* Family Sharing Toggle - only show if user is in a family WITH valid familyGroupId AND owns the task */}
+          {/* SECURITY: Require familyGroupId to prevent unencrypted family-shared tasks */}
           {/* When editing another family member's task, hide the toggle to prevent encryption key issues */}
-          {isInFamily && (!editTodo || isOwner) && (
+          {isInFamily && familyGroupId && (!editTodo || isOwner) && (
             <div className="flex items-center justify-between p-3 rounded-lg bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800">
               <div className="flex items-center gap-3">
                 <Users className="w-5 h-5 text-pink-500" />
