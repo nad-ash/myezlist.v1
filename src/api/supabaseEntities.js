@@ -197,6 +197,26 @@ class SupabaseEntity {
     
     return true;
   }
+
+  /**
+   * Get a single record by ID
+   * @param {string} id - Record ID
+   * @returns {Object|null} The record or null if not found
+   */
+  async get(id) {
+    const { data, error } = await supabase
+      .from(this.tableName)
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      console.error(`Error getting ${this.tableName}:`, error);
+      throw error;
+    }
+    
+    return data;
+  }
 }
 
 // ==========================================

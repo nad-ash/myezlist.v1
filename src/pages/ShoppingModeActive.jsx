@@ -199,34 +199,23 @@ export default function ShoppingModeActivePage() {
       }
       setUser(currentUser);
 
-      // ✅ Check cache for ListMember first
-      let memberships = appCache.getListMemberships(currentUser.id);
+      // ✅ Try to get all ShoppingList entities from cache first
+      // RLS will return all lists user has access to (owned, member, or family-shared)
+      let allLists = appCache.getShoppingListEntities();
       
-      if (!memberships) {
-        logger.cache('ShoppingModeActive', 'Fetching ListMember from API (cache miss)');
-        memberships = await ListMember.filter({ user_id: currentUser.id });
-        appCache.setListMemberships(currentUser.id, memberships);
+      if (!allLists) {
+        logger.cache('ShoppingModeActive', 'Fetching ShoppingList entities from API (cache miss)');
+        allLists = await ShoppingList.list();
+        appCache.setShoppingListEntities(allLists);
       } else {
-        logger.cache('ShoppingModeActive', 'Using cached ListMember data');
+        logger.cache('ShoppingModeActive', 'Using cached ShoppingList entities');
       }
       
-      const approvedMemberships = memberships.filter(m => m.status === 'approved' || m.role === 'owner');
-      const listIds = approvedMemberships.map(m => m.list_id);
+      // Filter to non-archived lists (RLS already handles access control)
+      const userLists = allLists.filter(list => !list.archived);
+      setLists(userLists);
 
-      if (listIds.length > 0) {
-        // ✅ Try to get all ShoppingList entities from cache first
-        let allLists = appCache.getShoppingListEntities();
-        
-        if (!allLists) {
-          logger.cache('ShoppingModeActive', 'Fetching ShoppingList entities from API (cache miss)');
-          allLists = await ShoppingList.list();
-          appCache.setShoppingListEntities(allLists);
-        } else {
-          logger.cache('ShoppingModeActive', 'Using cached ShoppingList entities');
-        }
-        
-        const userLists = allLists.filter(list => listIds.includes(list.id) && !list.archived);
-        setLists(userLists);
+      if (userLists.length > 0) {
 
         // Check URL params first before setting default
         const urlParams = new URLSearchParams(window.location.search);

@@ -84,15 +84,27 @@ serve(async (req) => {
     // Handle different event types
     switch (eventType) {
       case "INITIAL_PURCHASE":
-      case "RENEWAL":
       case "UNCANCELLATION":
-        // Subscription is active
+        // Subscription is active (new or reactivated)
         await updateSubscriptionStatus(supabase, appUserId, {
           status: "active",
           tier: "premium",
           provider,
           expirationDate,
-          productId
+          productId,
+          isRenewal: false
+        });
+        break;
+
+      case "RENEWAL":
+        // Subscription renewed - reset credits
+        await updateSubscriptionStatus(supabase, appUserId, {
+          status: "active",
+          tier: "premium",
+          provider,
+          expirationDate,
+          productId,
+          isRenewal: true
         });
         break;
 
@@ -160,6 +172,54 @@ serve(async (req) => {
 });
 
 /**
+ * Sync family member tiers when owner subscription changes
+ */
+async function syncFamilyMemberTiers(
+  supabase: ReturnType<typeof createClient>,
+  ownerId: string,
+  newTier: string
+) {
+  try {
+    console.log(`Syncing family member tiers for owner ${ownerId} to tier ${newTier}`);
+    const { error } = await supabase.rpc("sync_family_member_tiers", {
+      p_owner_id: ownerId,
+      p_new_tier: newTier,
+    });
+
+    if (error) {
+      console.error("Failed to sync family member tiers:", error);
+    } else {
+      console.log(`Family member tiers synced to ${newTier}`);
+    }
+  } catch (err) {
+    console.error("Error syncing family member tiers:", err);
+  }
+}
+
+/**
+ * Reset family credits on billing cycle renewal
+ */
+async function resetFamilyCredits(
+  supabase: ReturnType<typeof createClient>,
+  ownerId: string
+) {
+  try {
+    console.log(`Resetting family credits for owner ${ownerId}`);
+    const { error } = await supabase.rpc("reset_family_credits", {
+      p_owner_id: ownerId,
+    });
+
+    if (error) {
+      console.error("Failed to reset family credits:", error);
+    } else {
+      console.log(`Family credits reset for owner ${ownerId}`);
+    }
+  } catch (err) {
+    console.error("Error resetting family credits:", err);
+  }
+}
+
+/**
  * Update user's subscription status in the database
  */
 async function updateSubscriptionStatus(
@@ -172,6 +232,7 @@ async function updateSubscriptionStatus(
     expirationDate: string | null;
     productId?: string;
     cancelledAt?: string;
+    isRenewal?: boolean;
   }
 ) {
   console.log(`Updating subscription for user ${userId}:`, data);
@@ -196,17 +257,34 @@ async function updateSubscriptionStatus(
     console.error("Failed to update user_subscriptions:", subError);
   }
 
+  // Build profile update object
+  const profileUpdate: Record<string, unknown> = { 
+    subscription_tier: data.tier,
+    updated_at: new Date().toISOString()
+  };
+
+  // Reset credits on renewal
+  if (data.isRenewal) {
+    profileUpdate.credits_used_this_month = 0;
+    profileUpdate.credits_reset_date = new Date().toISOString();
+  }
+
   // Update profile tier
   const { error: profileError } = await supabase
     .from("profiles")
-    .update({ 
-      subscription_tier: data.tier,
-      updated_at: new Date().toISOString()
-    })
+    .update(profileUpdate)
     .eq("id", userId);
 
   if (profileError) {
     console.error("Failed to update profile tier:", profileError);
+  } else {
+    // Sync family member tiers
+    await syncFamilyMemberTiers(supabase, userId, data.tier);
+    
+    // Reset family credits on renewal
+    if (data.isRenewal) {
+      await resetFamilyCredits(supabase, userId);
+    }
   }
 
   console.log(`✅ Updated subscription for user ${userId} to ${data.tier}`);

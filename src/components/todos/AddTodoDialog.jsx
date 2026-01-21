@@ -20,8 +20,9 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarIcon, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 // Parse date string (YYYY-MM-DD) as local date to avoid timezone shift
 const parseLocalDate = (dateString) => {
@@ -53,7 +54,7 @@ const statuses = [
   { value: "completed", label: "Completed" },
 ];
 
-export default function AddTodoDialog({ open, onClose, onSave, editTodo = null }) {
+export default function AddTodoDialog({ open, onClose, onSave, editTodo = null, isInFamily = false, familyGroupId = null, isOwner = true }) {
   const [todo, setTodo] = useState({
     title: "",
     description: "",
@@ -62,6 +63,7 @@ export default function AddTodoDialog({ open, onClose, onSave, editTodo = null }
     category: "personal",
     due_date: "",
     due_time: "", // Added due_time field
+    shared_with_family: false, // Family sharing toggle
   });
 
   useEffect(() => {
@@ -74,6 +76,7 @@ export default function AddTodoDialog({ open, onClose, onSave, editTodo = null }
         category: editTodo.category || "personal",
         due_date: editTodo.due_date || "",
         due_time: editTodo.due_time || "", // Added due_time field
+        shared_with_family: editTodo.shared_with_family || false,
       });
     } else {
       resetForm();
@@ -102,6 +105,7 @@ export default function AddTodoDialog({ open, onClose, onSave, editTodo = null }
       category: "personal",
       due_date: "",
       due_time: "", // Added due_time field
+      shared_with_family: false,
     });
   };
 
@@ -253,6 +257,30 @@ export default function AddTodoDialog({ open, onClose, onSave, editTodo = null }
               />
             </div>
           </div>
+
+          {/* Family Sharing Toggle - only show if user is in a family WITH valid familyGroupId AND owns the task */}
+          {/* SECURITY: Require familyGroupId to prevent unencrypted family-shared tasks */}
+          {/* When editing another family member's task, hide the toggle to prevent encryption key issues */}
+          {isInFamily && familyGroupId && (!editTodo || isOwner) && (
+            <div className="flex items-center justify-between p-3 rounded-lg bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800">
+              <div className="flex items-center gap-3">
+                <Users className="w-5 h-5 text-pink-500" />
+                <div>
+                  <Label htmlFor="share-family" className="font-medium text-slate-800 dark:text-slate-200">
+                    Share with Family
+                  </Label>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Family members can see this task
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="share-family"
+                checked={todo.shared_with_family}
+                onCheckedChange={(checked) => setTodo({ ...todo, shared_with_family: checked })}
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-3">

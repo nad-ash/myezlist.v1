@@ -2,13 +2,14 @@ import React, { useState, useEffect } from "react";
 import { User, Recipe, RecipeFavorite } from "@/api/entities";
 import { updateStatCount } from "@/api/functions";
 import { trackRecipe, trackRecipeFavorite, PAGES } from "@/utils/trackingContext";
+import { getFamilyMemberIds, getFamilyInfo } from "@/services/familyService";
 import { InvokeLLM, GenerateImage, UploadFile, AI_USE_CASES } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ChefHat, Search, Star, Clock, Users as UsersIcon, ArrowLeft, Sparkles, Plus, Trash2, Upload, Check, PenSquare } from "lucide-react";
+import { Loader2, ChefHat, Search, Star, Clock, Users as UsersIcon, ArrowLeft, Sparkles, Plus, Trash2, Upload, Check, PenSquare, Heart } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { appCache } from "@/components/utils/appCache";
 import { incrementUsage } from "@/components/utils/usageSync";
 import { useRecipeLoadingPhrases } from "@/hooks/useRecipeLoadingPhrases";
+import { checkCreditsAvailable, consumeCredits } from "@/components/utils/creditManager";
+import InsufficientCreditsDialog from "@/components/common/InsufficientCreditsDialog";
 
 const allCuisines = [
   "Italian", "Indian / Pakistani", "Chinese", "Mexican", "French", "Japanese",
@@ -53,6 +56,17 @@ export default function MyRecipesPage() {
   const [generatingManualImage, setGeneratingManualImage] = useState(false);
   const [manualImageOptions, setManualImageOptions] = useState([]);
   const [selectedManualImage, setSelectedManualImage] = useState(null);
+  
+  // Family sharing
+  const [familyMemberMap, setFamilyMemberMap] = useState({}); // userId -> name/email
+  const [showFamilyRecipes, setShowFamilyRecipes] = useState(true);
+  
+  // Insufficient credits dialog state
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
+  const [insufficientCreditsInfo, setInsufficientCreditsInfo] = useState({
+    creditsNeeded: 0,
+    creditsAvailable: 0
+  });
 
   useEffect(() => {
     checkAuth();
@@ -108,7 +122,36 @@ export default function MyRecipesPage() {
         console.log('📦 MyRecipes: Using cached recipes data');
       }
       
-      const myRecipes = allRecipes.filter(r => r.is_user_generated && r.generated_by_user_id === currentUser.id);
+      // Get family member IDs to show their recipes too
+      let familyUserIds = [currentUser.id];
+      let memberNameMap = {};
+      
+      try {
+        const familyInfo = await getFamilyInfo();
+        if (familyInfo.success && familyInfo.has_family && familyInfo.members) {
+          // Get all approved family members
+          const approvedMembers = familyInfo.members.filter(m => m.status === 'approved');
+          // Always include current user + approved family members (use Set to avoid duplicates)
+          familyUserIds = [...new Set([currentUser.id, ...approvedMembers.map(m => m.user_id)])];
+          
+          // Create a map of userId -> display name for badges
+          approvedMembers.forEach(m => {
+            if (m.user_id !== currentUser.id) {
+              memberNameMap[m.user_id] = m.full_name || m.email?.split('@')[0] || 'Family';
+            }
+          });
+          console.log('👨‍👩‍👧‍👦 MyRecipes: Including recipes from', familyUserIds.length, 'family members');
+        }
+      } catch (familyError) {
+        console.warn('👨‍👩‍👧‍👦 MyRecipes: Could not get family info, showing only own recipes');
+      }
+      
+      setFamilyMemberMap(memberNameMap);
+      
+      // Filter to user-generated recipes from current user OR family members
+      const myRecipes = allRecipes.filter(r => 
+        r.is_user_generated && familyUserIds.includes(r.generated_by_user_id)
+      );
       setRecipes(myRecipes);
 
       // Check cache first for recipe favorites
@@ -167,8 +210,38 @@ export default function MyRecipesPage() {
   const handleGenerateRecipe = async () => {
     setError(null);
     if (!searchTerm.trim()) { alert('Please enter a dish name'); return; }
+    
+    // Check credits before generation
+    try {
+      const creditCheck = await checkCreditsAvailable('recipe_generation');
+      if (!creditCheck.hasCredits) {
+        setInsufficientCreditsInfo({
+          creditsNeeded: creditCheck.creditsNeeded,
+          creditsAvailable: creditCheck.creditsAvailable
+        });
+        setShowInsufficientCredits(true);
+        return;
+      }
+    } catch (creditError) {
+      console.error("Error checking credits:", creditError);
+      alert("Unable to verify credits. Please try again.");
+      return;
+    }
+    
     setGenerating(true); setGenerationStage('recipe');
     try {
+      // Consume credits before expensive operation
+      const creditResult = await consumeCredits(
+        'recipe_generation',
+        `Generated recipe: "${searchTerm.trim()}"`
+      );
+
+      if (!creditResult.success) {
+        alert(creditResult.message);
+        setGenerating(false);
+        return;
+      }
+      
       const recipePrompt = `Generate a detailed recipe for: "${searchTerm}". Return JSON with these exact fields:
 - full_title: string (the complete dish name)
 - cooking_time: string (e.g. "30-45 minutes")
@@ -411,9 +484,19 @@ Do NOT use "description", "step_number", "name", or any other property names for
                         className="absolute top-3 right-3 w-10 h-10 rounded-full bg-white/90 hover:bg-white flex items-center justify-center shadow-lg transition-all hover:scale-110">
                         <Star className={cn("w-5 h-5", favorites.includes(recipe.id) ? "fill-yellow-500 text-yellow-500" : "text-slate-400")} />
                       </button>
-                      <Badge className="absolute top-3 left-3 bg-purple-500/90 text-white text-xs">
-                        <Sparkles className="w-3 h-3 mr-1" />My Recipe
-                      </Badge>
+                      {recipe.generated_by_user_id === user.id ? (
+                        <Badge className="absolute top-3 left-3 bg-purple-500/90 text-white text-xs">
+                          <Sparkles className="w-3 h-3 mr-1" />My Recipe
+                        </Badge>
+                      ) : familyMemberMap[recipe.generated_by_user_id] ? (
+                        <Badge className="absolute top-3 left-3 bg-pink-500/90 text-white text-xs">
+                          <Heart className="w-3 h-3 mr-1" />From {familyMemberMap[recipe.generated_by_user_id]}
+                        </Badge>
+                      ) : (
+                        <Badge className="absolute top-3 left-3 bg-purple-500/90 text-white text-xs">
+                          <Sparkles className="w-3 h-3 mr-1" />My Recipe
+                        </Badge>
+                      )}
                     </div>
                   )}
                   <div 
@@ -546,6 +629,14 @@ Do NOT use "description", "step_number", "name", or any other property names for
           )}
         </TabsContent>
       </Tabs>
+
+      <InsufficientCreditsDialog
+        open={showInsufficientCredits}
+        onClose={() => setShowInsufficientCredits(false)}
+        creditsNeeded={insufficientCreditsInfo.creditsNeeded}
+        creditsAvailable={insufficientCreditsInfo.creditsAvailable}
+        featureName="AI Recipe Generation"
+      />
     </div>
   );
 }

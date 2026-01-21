@@ -1,10 +1,12 @@
 import { User, UserAdmin, PremiumFeature, CreditTransaction } from "@/api/entities";
 import { appCache } from "./appCache";
+import { getFamilyCreditsRemaining, consumeFamilyCredits } from "@/services/familyService";
 
 /**
  * Check if user has enough credits for a premium feature
+ * Supports family credit pooling - checks family pool if user is in a family group
  * @param {string} featureKey - The unique key of the premium feature
- * @returns {Promise<{hasCredits: boolean, creditsNeeded: number, creditsAvailable: number, message?: string}>}
+ * @returns {Promise<{hasCredits: boolean, creditsNeeded: number, creditsAvailable: number, isFamilyPool: boolean, message?: string}>}
  */
 export async function checkCreditsAvailable(featureKey) {
   try {
@@ -26,25 +28,41 @@ export async function checkCreditsAvailable(featureKey) {
       console.log('📦 creditManager: Using cached user data');
     }
     
-    const creditsUsed = user.credits_used_this_month || 0;
-    const creditsTotal = user.monthly_credits_total || 0;
-    const creditsAvailable = Math.max(0, creditsTotal - creditsUsed);
+    // Check family credit pool - this returns individual credits if not in a family
+    let creditsInfo;
+    try {
+      creditsInfo = await getFamilyCreditsRemaining(user.id);
+      console.log('👨‍👩‍👧‍👦 creditManager: Credits info:', creditsInfo);
+    } catch (familyError) {
+      // Fallback to individual credits if family check fails
+      console.warn('👨‍👩‍👧‍👦 creditManager: Family credits check failed, using individual:', familyError);
+      creditsInfo = {
+        is_family_pool: false,
+        monthly_credits: user.monthly_credits_total || 0,
+        credits_used: user.credits_used_this_month || 0,
+        credits_remaining: Math.max(0, (user.monthly_credits_total || 0) - (user.credits_used_this_month || 0))
+      };
+    }
     
+    const creditsAvailable = creditsInfo.credits_remaining;
     const hasCredits = creditsAvailable >= feature.credits_per_use;
     
     if (!hasCredits) {
+      const poolType = creditsInfo.is_family_pool ? "Your family" : "You";
       return {
         hasCredits: false,
         creditsNeeded: feature.credits_per_use,
         creditsAvailable,
-        message: `This feature requires ${feature.credits_per_use} credits, but you only have ${creditsAvailable} remaining. Upgrade your plan or wait for your monthly credit reset.`
+        isFamilyPool: creditsInfo.is_family_pool,
+        message: `This feature requires ${feature.credits_per_use} credits, but ${poolType.toLowerCase()} only ${creditsInfo.is_family_pool ? 'has' : 'have'} ${creditsAvailable} remaining. Upgrade your plan or wait for your monthly credit reset.`
       };
     }
     
     return {
       hasCredits: true,
       creditsNeeded: feature.credits_per_use,
-      creditsAvailable
+      creditsAvailable,
+      isFamilyPool: creditsInfo.is_family_pool
     };
   } catch (error) {
     console.error("Error checking credits:", error);
@@ -54,10 +72,11 @@ export async function checkCreditsAvailable(featureKey) {
 
 /**
  * Consume credits for a premium feature
+ * Supports family credit pooling - deducts from family pool if user is in a family group
  * @param {string} featureKey - The unique key of the premium feature
  * @param {string} description - Description of what the credits were used for
  * @param {object} metadata - Additional metadata about the transaction
- * @returns {Promise<{success: boolean, remainingCredits: number, message?: string}>}
+ * @returns {Promise<{success: boolean, remainingCredits: number, isFamilyPool: boolean, message?: string}>}
  */
 export async function consumeCredits(featureKey, description, metadata = {}) {
   try {
@@ -79,26 +98,53 @@ export async function consumeCredits(featureKey, description, metadata = {}) {
       console.log('📦 creditManager: Using cached user data for credit check');
     }
     
-    const creditsUsed = user.credits_used_this_month || 0;
-    const creditsTotal = user.monthly_credits_total || 0;
-    const creditsAvailable = Math.max(0, creditsTotal - creditsUsed);
+    // Try to use family credit pool first
+    let consumeResult;
+    let isFamilyPool = false;
     
-    // Check if user has enough credits
-    if (creditsAvailable < feature.credits_per_use) {
-      return {
-        success: false,
-        remainingCredits: creditsAvailable,
-        message: `Insufficient credits. This feature requires ${feature.credits_per_use} credits, but you only have ${creditsAvailable} remaining.`
+    try {
+      consumeResult = await consumeFamilyCredits(user.id, feature.credits_per_use, featureKey);
+      // Use is_family_pool from RPC response (handles both family pool and individual credits)
+      isFamilyPool = consumeResult.is_family_pool || false;
+      console.log('👨‍👩‍👧‍👦 creditManager: Credits consumed:', consumeResult);
+      
+      if (!consumeResult.success) {
+        return {
+          success: false,
+          remainingCredits: consumeResult.credits_remaining || 0,
+          isFamilyPool: consumeResult.is_family_pool || false,
+          message: consumeResult.message || `Insufficient credits. This feature requires ${feature.credits_per_use} credits.`
+        };
+      }
+    } catch (familyError) {
+      // Fallback to individual credit consumption if family RPC fails
+      console.warn('👨‍👩‍👧‍👦 creditManager: Family credit consumption failed, using individual:', familyError);
+      
+      const creditsUsed = user.credits_used_this_month || 0;
+      const creditsTotal = user.monthly_credits_total || 0;
+      const creditsAvailable = Math.max(0, creditsTotal - creditsUsed);
+      
+      // Check if user has enough credits
+      if (creditsAvailable < feature.credits_per_use) {
+        return {
+          success: false,
+          remainingCredits: creditsAvailable,
+          isFamilyPool: false,
+          message: `Insufficient credits. This feature requires ${feature.credits_per_use} credits, but you only have ${creditsAvailable} remaining.`
+        };
+      }
+      
+      // Update user's credit usage
+      const newCreditsUsed = creditsUsed + feature.credits_per_use;
+      await User.updateMe({ credits_used_this_month: newCreditsUsed });
+      
+      consumeResult = {
+        success: true,
+        credits_consumed: feature.credits_per_use,
+        credits_remaining: Math.max(0, creditsTotal - newCreditsUsed)
       };
+      isFamilyPool = false;
     }
-    
-    // Update user's credit usage
-    const newCreditsUsed = creditsUsed + feature.credits_per_use;
-    const updates = {
-      credits_used_this_month: newCreditsUsed
-    };
-    
-    await User.updateMe(updates);
     
     // CRITICAL: Invalidate user cache after credit consumption
     console.log('🔄 creditManager: Invalidating user cache after credit consumption');
@@ -117,15 +163,17 @@ export async function consumeCredits(featureKey, description, metadata = {}) {
       credits_consumed: feature.credits_per_use,
       transaction_type: 'consumption',
       description: description,
-      metadata: metadata
+      metadata: { ...metadata, is_family_pool: isFamilyPool }
     });
     
-    const remainingCredits = creditsTotal - newCreditsUsed;
+    const remainingCredits = consumeResult.credits_remaining;
+    const poolType = isFamilyPool ? "Your family has" : "You have";
     
     return {
       success: true,
       remainingCredits: Math.max(0, remainingCredits),
-      message: `Successfully used ${feature.credits_per_use} credits. You have ${Math.max(0, remainingCredits)} credits remaining.`
+      isFamilyPool,
+      message: `Successfully used ${feature.credits_per_use} credits. ${poolType} ${Math.max(0, remainingCredits)} credits remaining.`
     };
   } catch (error) {
     console.error("Error consuming credits:", error);
@@ -232,6 +280,49 @@ export async function getPremiumFeatures() {
     return features;
   } catch (error) {
     console.error("Error fetching premium features:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get current credit info (supports family pools)
+ * Useful for displaying credit status in UI
+ * @returns {Promise<{creditsAvailable: number, creditsTotal: number, creditsUsed: number, isFamilyPool: boolean, familyGroupId?: string}>}
+ */
+export async function getCreditInfo() {
+  try {
+    // Check cache first for user
+    let user = appCache.getUser();
+    if (!user) {
+      user = await User.me();
+      appCache.setUser(user);
+    }
+    
+    // Get family credit info
+    try {
+      const creditsInfo = await getFamilyCreditsRemaining(user.id);
+      return {
+        creditsAvailable: creditsInfo.credits_remaining,
+        creditsTotal: creditsInfo.monthly_credits,
+        creditsUsed: creditsInfo.credits_used,
+        isFamilyPool: creditsInfo.is_family_pool,
+        familyGroupId: creditsInfo.family_group_id || null
+      };
+    } catch (familyError) {
+      // Fallback to individual credits
+      console.warn('👨‍👩‍👧‍👦 creditManager: Family credits check failed, using individual:', familyError);
+      const creditsTotal = user.monthly_credits_total || 0;
+      const creditsUsed = user.credits_used_this_month || 0;
+      return {
+        creditsAvailable: Math.max(0, creditsTotal - creditsUsed),
+        creditsTotal,
+        creditsUsed,
+        isFamilyPool: false,
+        familyGroupId: null
+      };
+    }
+  } catch (error) {
+    console.error("Error getting credit info:", error);
     throw error;
   }
 }

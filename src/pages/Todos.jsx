@@ -5,7 +5,8 @@ import { updateStatCount } from "@/api/functions";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CheckCircle2, ChevronDown, ChevronRight, Home, Briefcase, User as UserIcon, ShoppingBag, Users, Heart, DollarSign, MoreHorizontal, Loader2, Shield, X } from "lucide-react";
+import { Plus, CheckCircle2, ChevronDown, ChevronRight, Home, Briefcase, User as UserIcon, ShoppingBag, Users, Heart as HeartIcon, DollarSign, MoreHorizontal, Loader2, Shield, X, RefreshCw } from "lucide-react";
+import { getFamilyInfo } from "@/services/familyService";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { createPageUrl } from "@/utils";
@@ -26,7 +27,7 @@ const categoryConfig = {
   personal: { label: "Personal", icon: UserIcon, color: "bg-pink-500" },
   errands: { label: "Errands", icon: ShoppingBag, color: "bg-orange-500" },
   family: { label: "Family", icon: Users, color: "bg-rose-500" },
-  health: { label: "Health", icon: Heart, color: "bg-green-500" },
+  health: { label: "Health", icon: HeartIcon, color: "bg-green-500" },
   finance: { label: "Finance", icon: DollarSign, color: "bg-cyan-500" },
   other: { label: "Other", icon: MoreHorizontal, color: "bg-slate-500" }
 };
@@ -61,6 +62,9 @@ export default function TodosPage() {
     // Check if user has dismissed the notice before
     return localStorage.getItem('tasks_security_notice_dismissed') !== 'true';
   });
+  const [isInFamily, setIsInFamily] = useState(false);
+  const [familyGroupId, setFamilyGroupId] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
 
   const dismissSecurityNotice = () => {
@@ -103,6 +107,28 @@ export default function TodosPage() {
       
       appCache.setUser(currentUser);
       setUser(currentUser);
+      
+      // Check if user is in a family group and get family_group_id for encryption
+      // SECURITY: Both isInFamily AND familyGroupId must be set together
+      // to prevent showing "Share with Family" toggle without a valid encryption key
+      try {
+        const familyInfo = await getFamilyInfo();
+        if (familyInfo.success && familyInfo.has_family && familyInfo.family_group?.id) {
+          // Only enable family sharing if we have a valid family_group_id for encryption
+          setIsInFamily(true);
+          setFamilyGroupId(familyInfo.family_group.id);
+          console.log('👨‍👩‍👧‍👦 Todos: User is in family group:', familyInfo.family_group.id);
+        } else if (familyInfo.success && familyInfo.has_family) {
+          // Edge case: user has family but no family_group_id - treat as not in family
+          console.warn('👨‍👩‍👧‍👦 Todos: User has family but missing family_group_id - disabling family sharing to prevent unencrypted storage');
+          setIsInFamily(false);
+          setFamilyGroupId(null);
+        }
+      } catch (familyError) {
+        console.warn('👨‍👩‍👧‍👦 Todos: Could not check family status');
+        setIsInFamily(false);
+        setFamilyGroupId(null);
+      }
     } catch (error) {
       console.error("Authentication required:", error);
       User.redirectToLogin(createPageUrl("Todos"));
@@ -111,18 +137,30 @@ export default function TodosPage() {
     }
   };
 
-  // CRITICAL FIX: Filter todos by current user's email
+  // Fetch all accessible todos (user's own + family-shared)
+  // RLS policy handles access control - we just fetch all that RLS allows
   // Uses EncryptedTodo which automatically decrypts title/description
+  // Family-shared tasks are encrypted with familyGroupId, private tasks with userId
   const { data: todos = [], isLoading } = useQuery({
-    queryKey: ['todos', user?.email],
-    queryFn: () => EncryptedTodo.filter({ created_by: user.email }, user.id, '-created_date'),
+    queryKey: ['todos', user?.id, isInFamily, familyGroupId],
+    queryFn: async () => {
+      if (isInFamily) {
+        // For family members: fetch all accessible tasks (RLS handles filtering)
+        console.log('👨‍👩‍👧‍👦 Todos: Fetching all accessible tasks (user + family-shared)');
+        return EncryptedTodo.list(user.id, familyGroupId, '-created_date');
+      } else {
+        // For non-family users: filter by email (more efficient)
+        return EncryptedTodo.filter({ created_by: user.email }, user.id, null, '-created_date');
+      }
+    },
     enabled: !!user && !!user.email && !!user.id,
   });
 
   // Mutations use EncryptedTodo which encrypts title/description before storage
+  // Family-shared tasks are encrypted with familyGroupId, private tasks with userId
   const createTodoMutation = useMutation({
     mutationFn: ({ todoData, trackingContext }) => 
-      EncryptedTodo.create(todoData, user.id, trackingContext),
+      EncryptedTodo.create(todoData, user.id, familyGroupId, trackingContext),
     onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ['todos'] });
       setShowAddDialog(false);
@@ -144,7 +182,7 @@ export default function TodosPage() {
 
   const updateTodoMutation = useMutation({
     mutationFn: ({ id, todoData, trackingContext }) => 
-      EncryptedTodo.update(id, todoData, user.id, trackingContext),
+      EncryptedTodo.update(id, todoData, user.id, familyGroupId, trackingContext),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['todos'] });
       setShowAddDialog(false);
@@ -258,6 +296,29 @@ export default function TodosPage() {
     }));
   };
 
+  // Hard refresh - refetch user, family info, and tasks
+  const handleHardRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      console.log('🔄 Hard refresh: Reloading user and tasks...');
+      
+      // Clear cache to force fresh data
+      appCache.clearAll();
+      
+      // Reload user and family info
+      await loadUser();
+      
+      // Invalidate and refetch todos
+      await queryClient.invalidateQueries({ queryKey: ['todos'] });
+      
+      console.log('✅ Hard refresh complete');
+    } catch (error) {
+      console.error('❌ Hard refresh failed:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleVoiceCommandAdd = async (taskData) => {
     if (!user) return;
 
@@ -352,6 +413,18 @@ export default function TodosPage() {
               </p>
             </div>
           </div>
+          
+          {/* Refresh Button */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleHardRefresh}
+            disabled={isRefreshing}
+            className="h-10 w-10 rounded-full border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+            title="Refresh tasks"
+          >
+            <RefreshCw className={cn("w-5 h-5 text-slate-600 dark:text-slate-400", isRefreshing && "animate-spin")} />
+          </Button>
         </div>
 
         {/* Security Notice Banner */}
@@ -555,6 +628,9 @@ export default function TodosPage() {
         }}
         onSave={handleSubmit}
         editTodo={editingTodo}
+        isInFamily={isInFamily}
+        familyGroupId={familyGroupId}
+        isOwner={!editingTodo || editingTodo.created_by === user?.email}
       />
 
       <UpgradePrompt

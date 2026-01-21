@@ -12,6 +12,7 @@ import { appCache } from "@/components/utils/appCache";
 import { incrementUsage } from "@/components/utils/usageSync";
 import { canAddItem } from "@/components/utils/tierManager";
 import UpgradePrompt from "@/components/common/UpgradePrompt";
+import InsufficientCreditsDialog from "@/components/common/InsufficientCreditsDialog";
 import { logger } from "@/utils/logger";
 
 const categories = [
@@ -35,7 +36,7 @@ const capitalizeWords = (str) => {
   return str.replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
-export default function FastAddItemInput({ listId, existingItems = [], onItemAdded }) {
+export default function FastAddItemInput({ listId, existingItems = [], onItemAdded, onOpenManualAdd }) {
   const [itemName, setItemName] = useState('');
   const [isFastAdding, setIsFastAdding] = useState(false);
   const [currentStatus, setCurrentStatus] = useState('');
@@ -46,6 +47,14 @@ export default function FastAddItemInput({ listId, existingItems = [], onItemAdd
   const [selectedSuggestion, setSelectedSuggestion] = useState(null);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [upgradeMessage, setUpgradeMessage] = useState("");
+  
+  // Insufficient credits dialog state
+  const [showInsufficientCredits, setShowInsufficientCredits] = useState(false);
+  const [insufficientCreditsInfo, setInsufficientCreditsInfo] = useState({
+    creditsNeeded: 0,
+    creditsAvailable: 0,
+    itemNameForManualAdd: ""
+  });
 
   useEffect(() => {
     loadCache();
@@ -111,13 +120,22 @@ export default function FastAddItemInput({ listId, existingItems = [], onItemAdd
           else if (normalizedWords.length > 1 && name.startsWith(normalized)) {
             score = 800 - name.length;
           }
-          // Single word search but item has multiple words - lower priority
-          // (e.g., "cranberry" should NOT strongly match "cranberry juice")
+          // Single word search but item has multiple words
+          // (e.g., "chilli" should match "green chilli", "cranberry" should match "cranberry juice")
           else if (normalizedWords.length === 1 && itemWords.length > 1) {
-            // Only give points if the first word matches exactly or is a plural
-            if (itemWords[0] === normalized || 
-                itemWords[0].startsWith(normalized) && itemWords[0].length - normalized.length <= 3) {
-              score = 200 - name.length; // Much lower score for compound items
+            // Check if any word in the item matches the search term
+            const matchingWordIndex = itemWords.findIndex(word => 
+              word === normalized || 
+              word.startsWith(normalized) || 
+              normalized.startsWith(word)
+            );
+            
+            if (matchingWordIndex === 0) {
+              // First word matches - higher priority (e.g., "cranberry" → "cranberry juice")
+              score = 200 - name.length;
+            } else if (matchingWordIndex > 0) {
+              // Non-first word matches - still good (e.g., "chilli" → "green chilli")
+              score = 150 - name.length;
             }
           }
           // Search term starts with item name
@@ -127,6 +145,11 @@ export default function FastAddItemInput({ listId, existingItems = [], onItemAdd
           // Contains search term (fallback)
           else if (name.includes(normalized) || displayName.includes(normalized)) {
             score = 100 - name.length;
+          }
+          
+          // Final fallback: if still no score but contains the search term anywhere
+          if (score === 0 && (name.includes(normalized) || displayName.includes(normalized))) {
+            score = 50 - name.length;
           }
           
           return { ...ci, _score: score };
@@ -200,7 +223,13 @@ export default function FastAddItemInput({ listId, existingItems = [], onItemAdd
       if (needsAI) {
         const creditCheck = await checkCreditsAvailable('fast_add_ai');
         if (!creditCheck.hasCredits) {
-          alert(`Insufficient credits for Fast Add with AI. Need ${creditCheck.creditsNeeded} but only have ${creditCheck.creditsAvailable}. Go to Settings to view your credits.`);
+          // Show user-friendly dialog with option to add manually
+          setInsufficientCreditsInfo({
+            creditsNeeded: creditCheck.creditsNeeded,
+            creditsAvailable: creditCheck.creditsAvailable,
+            itemNameForManualAdd: itemName.trim()
+          });
+          setShowInsufficientCredits(true);
           setIsFastAdding(false);
           setCurrentStatus('');
           return;
@@ -355,9 +384,10 @@ export default function FastAddItemInput({ listId, existingItems = [], onItemAdd
   return (
     <>
       <div className="bg-white rounded-lg p-3 mb-4 border border-blue-200 shadow-sm dark:bg-slate-800 dark:border-slate-600">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
           <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
           <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-100">Quick Add</h3>
+          <span className="text-xs text-slate-500 dark:text-slate-400">(AI auto categorization + image generation)</span>
           {loadingCache && (
             <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
           )}
@@ -422,6 +452,22 @@ export default function FastAddItemInput({ listId, existingItems = [], onItemAdd
         title="Item Limit Reached"
         message={upgradeMessage}
         featureName="Additional Items"
+      />
+
+      <InsufficientCreditsDialog
+        open={showInsufficientCredits}
+        onClose={() => setShowInsufficientCredits(false)}
+        creditsNeeded={insufficientCreditsInfo.creditsNeeded}
+        creditsAvailable={insufficientCreditsInfo.creditsAvailable}
+        featureName="Fast Add with AI"
+        itemName={insufficientCreditsInfo.itemNameForManualAdd}
+        onAddManually={(prefilledName) => {
+          setItemName(''); // Clear the quick add input
+          setSelectedSuggestion(null);
+          if (onOpenManualAdd) {
+            onOpenManualAdd(prefilledName);
+          }
+        }}
       />
     </>
   );

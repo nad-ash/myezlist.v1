@@ -616,6 +616,7 @@ GRANT EXECUTE ON FUNCTION public.join_family_via_token(text) TO authenticated;
 -- ===========================================
 -- FUNCTION: Leave Family Group
 -- Allows a member to leave their family group
+-- Resets member's tier back to free when leaving
 -- ===========================================
 CREATE OR REPLACE FUNCTION public.leave_family_group()
 RETURNS jsonb
@@ -626,6 +627,7 @@ DECLARE
     v_user_id uuid;
     v_family_group_id uuid;
     v_membership RECORD;
+    v_free_tier RECORD;
 BEGIN
     v_user_id := auth.uid();
     IF v_user_id IS NULL THEN
@@ -660,28 +662,37 @@ BEGIN
         );
     END IF;
     
+    -- Get free tier details for resetting member
+    SELECT monthly_credits INTO v_free_tier
+    FROM public.subscription_tiers
+    WHERE tier_name = 'free';
+    
     -- Remove membership
     DELETE FROM public.family_members WHERE id = v_membership.id;
     
-    -- Update profile
+    -- Update profile - reset to free tier
     UPDATE public.profiles
     SET family_group_id = NULL,
+        subscription_tier = 'free',
+        monthly_credits_total = COALESCE(v_free_tier.monthly_credits, 10),
+        credits_used_this_month = 0,
         updated_date = now()
     WHERE id = v_user_id;
     
     RETURN jsonb_build_object(
         'success', true,
-        'message', 'You have left the family group'
+        'message', 'You have left the family group. Your plan has been reset to Free.'
     );
 END;
 $$;
 
-COMMENT ON FUNCTION public.leave_family_group IS 'Allows a member to leave their family group';
+COMMENT ON FUNCTION public.leave_family_group IS 'Allows a member to leave their family group and resets their tier';
 GRANT EXECUTE ON FUNCTION public.leave_family_group() TO authenticated;
 
 -- ===========================================
 -- FUNCTION: Approve Family Member
 -- Owner approves a pending member
+-- Syncs the member's subscription tier to match owner's tier
 -- ===========================================
 CREATE OR REPLACE FUNCTION public.approve_family_member(p_member_id uuid)
 RETURNS jsonb
@@ -692,6 +703,7 @@ DECLARE
     v_user_id uuid;
     v_membership RECORD;
     v_family_group RECORD;
+    v_owner_tier RECORD;
 BEGIN
     v_user_id := auth.uid();
     IF v_user_id IS NULL THEN
@@ -731,27 +743,45 @@ BEGIN
         );
     END IF;
     
+    -- Get the owner's subscription tier details
+    SELECT p.subscription_tier, st.monthly_credits, st.max_shopping_lists, 
+           st.max_total_items, st.max_tasks, st.max_custom_recipes, st.has_ads,
+           st.allowed_themes
+    INTO v_owner_tier
+    FROM public.profiles p
+    JOIN public.subscription_tiers st ON st.tier_name = p.subscription_tier
+    WHERE p.id = v_user_id;
+    
     -- Update member status
     UPDATE public.family_members
     SET status = 'approved',
         updated_date = now()
     WHERE id = p_member_id;
     
+    -- Sync member's subscription tier to match the owner's tier
+    UPDATE public.profiles
+    SET subscription_tier = v_owner_tier.subscription_tier,
+        monthly_credits_total = v_owner_tier.monthly_credits,
+        updated_date = now()
+    WHERE id = v_membership.user_id;
+    
     RETURN jsonb_build_object(
         'success', true,
         'member_id', p_member_id,
         'member_name', v_membership.member_name,
-        'message', 'Member approved successfully'
+        'new_tier', v_owner_tier.subscription_tier,
+        'message', 'Member approved and subscription synced successfully'
     );
 END;
 $$;
 
-COMMENT ON FUNCTION public.approve_family_member IS 'Allows family owner to approve pending members';
+COMMENT ON FUNCTION public.approve_family_member IS 'Allows family owner to approve pending members and sync their tier';
 GRANT EXECUTE ON FUNCTION public.approve_family_member(uuid) TO authenticated;
 
 -- ===========================================
 -- FUNCTION: Remove Family Member
 -- Owner removes a member from the family
+-- Resets removed member's tier back to free
 -- ===========================================
 CREATE OR REPLACE FUNCTION public.remove_family_member(p_member_id uuid)
 RETURNS jsonb
@@ -762,6 +792,7 @@ DECLARE
     v_user_id uuid;
     v_membership RECORD;
     v_family_group RECORD;
+    v_free_tier RECORD;
 BEGIN
     v_user_id := auth.uid();
     IF v_user_id IS NULL THEN
@@ -810,12 +841,20 @@ BEGIN
         );
     END IF;
     
+    -- Get free tier details for resetting member
+    SELECT monthly_credits INTO v_free_tier
+    FROM public.subscription_tiers
+    WHERE tier_name = 'free';
+    
     -- Remove membership
     DELETE FROM public.family_members WHERE id = p_member_id;
     
-    -- Update the removed member's profile
+    -- Update the removed member's profile - reset to free tier
     UPDATE public.profiles
     SET family_group_id = NULL,
+        subscription_tier = 'free',
+        monthly_credits_total = COALESCE(v_free_tier.monthly_credits, 10),
+        credits_used_this_month = 0,
         updated_date = now()
     WHERE id = v_membership.user_id;
     
@@ -844,6 +883,7 @@ DECLARE
     v_tier RECORD;
     v_existing_group RECORD;
     v_new_group_id uuid;
+    v_owner_credits_used integer;
 BEGIN
     v_user_id := auth.uid();
     IF v_user_id IS NULL THEN
@@ -868,9 +908,9 @@ BEGIN
         );
     END IF;
     
-    -- Check if user's tier allows family sharing
-    SELECT st.max_family_members
-    INTO v_tier
+    -- Check if user's tier allows family sharing and get their current credit usage
+    SELECT st.max_family_members, COALESCE(p.credits_used_this_month, 0)
+    INTO v_tier.max_family_members, v_owner_credits_used
     FROM public.profiles p
     JOIN public.subscription_tiers st ON st.tier_name = p.subscription_tier
     WHERE p.id = v_user_id;
@@ -883,9 +923,10 @@ BEGIN
         );
     END IF;
     
-    -- Create family group
-    INSERT INTO public.family_groups (owner_id, name)
-    VALUES (v_user_id, p_name)
+    -- Create family group with owner's current credit usage carried over
+    -- This ensures the family pool reflects credits already used this billing cycle
+    INSERT INTO public.family_groups (owner_id, name, credits_used_this_month)
+    VALUES (v_user_id, p_name, v_owner_credits_used)
     RETURNING id INTO v_new_group_id;
     
     -- Add owner as first member
@@ -1248,6 +1289,348 @@ $$;
 COMMENT ON FUNCTION public.sync_family_member_tiers IS 'Syncs family member tiers when owner subscription changes';
 -- Only service role should call this
 GRANT EXECUTE ON FUNCTION public.sync_family_member_tiers(uuid, text) TO service_role;
+
+-- ===========================================
+-- SCHEMA MODIFICATIONS: shopping_lists
+-- Add shared_with_family column for family sharing
+-- ===========================================
+ALTER TABLE public.shopping_lists 
+ADD COLUMN IF NOT EXISTS shared_with_family boolean DEFAULT false;
+
+COMMENT ON COLUMN public.shopping_lists.shared_with_family IS 'When true, this list is visible to all approved family members';
+
+CREATE INDEX IF NOT EXISTS idx_shopping_lists_shared_with_family ON public.shopping_lists(shared_with_family);
+
+-- ===========================================
+-- RLS POLICIES: shopping_lists (updated for family sharing)
+-- ===========================================
+-- Drop existing SELECT policy and recreate with family support
+DROP POLICY IF EXISTS "Users can view own lists" ON public.shopping_lists;
+
+CREATE POLICY "Users can view own and family-shared lists" ON public.shopping_lists
+    FOR SELECT USING (
+        -- User's own lists
+        (owner_id = auth.uid())
+        -- OR lists they're a member of
+        OR (id IN (
+            SELECT list_id FROM public.list_members
+            WHERE user_id = auth.uid()
+        ))
+        -- OR family-shared lists from approved family members
+        OR (
+            shared_with_family = true
+            AND owner_id IN (
+                SELECT fm.user_id 
+                FROM public.family_members fm
+                WHERE fm.family_group_id = (
+                    SELECT family_group_id FROM public.profiles WHERE id = auth.uid()
+                )
+                AND fm.status = 'approved'
+            )
+        )
+    );
+
+-- ===========================================
+-- RLS POLICIES: items (updated for family sharing)
+-- ===========================================
+-- Drop existing SELECT policy and recreate with family support
+DROP POLICY IF EXISTS "Users can view items in their lists" ON public.items;
+
+CREATE POLICY "Users can view items in own and family-shared lists" ON public.items
+    FOR SELECT USING (
+        -- Items in user's own lists
+        (list_id IN (
+            SELECT id FROM public.shopping_lists
+            WHERE owner_id = auth.uid()
+        ))
+        -- OR items in lists they're a member of
+        OR (list_id IN (
+            SELECT list_id FROM public.list_members
+            WHERE user_id = auth.uid()
+        ))
+        -- OR items in family-shared lists
+        OR (list_id IN (
+            SELECT sl.id FROM public.shopping_lists sl
+            WHERE sl.shared_with_family = true
+            AND sl.owner_id IN (
+                SELECT fm.user_id 
+                FROM public.family_members fm
+                WHERE fm.family_group_id = (
+                    SELECT family_group_id FROM public.profiles WHERE id = auth.uid()
+                )
+                AND fm.status = 'approved'
+            )
+        ))
+    );
+
+-- Allow family members to add items to family-shared lists
+DROP POLICY IF EXISTS "Users can add items to their lists" ON public.items;
+
+CREATE POLICY "Users can add items to own and family-shared lists" ON public.items
+    FOR INSERT WITH CHECK (
+        -- Items in user's own lists
+        (list_id IN (
+            SELECT id FROM public.shopping_lists
+            WHERE owner_id = auth.uid()
+        ))
+        -- OR items in lists they're a member of
+        OR (list_id IN (
+            SELECT list_id FROM public.list_members
+            WHERE user_id = auth.uid()
+        ))
+        -- OR items in family-shared lists
+        OR (list_id IN (
+            SELECT sl.id FROM public.shopping_lists sl
+            WHERE sl.shared_with_family = true
+            AND sl.owner_id IN (
+                SELECT fm.user_id 
+                FROM public.family_members fm
+                WHERE fm.family_group_id = (
+                    SELECT family_group_id FROM public.profiles WHERE id = auth.uid()
+                )
+                AND fm.status = 'approved'
+            )
+        ))
+    );
+
+-- Allow family members to update items in family-shared lists
+DROP POLICY IF EXISTS "Users can update items in their lists" ON public.items;
+
+CREATE POLICY "Users can update items in own and family-shared lists" ON public.items
+    FOR UPDATE USING (
+        -- Items in user's own lists
+        (list_id IN (
+            SELECT id FROM public.shopping_lists
+            WHERE owner_id = auth.uid()
+        ))
+        -- OR items in lists they're a member of
+        OR (list_id IN (
+            SELECT list_id FROM public.list_members
+            WHERE user_id = auth.uid()
+        ))
+        -- OR items in family-shared lists
+        OR (list_id IN (
+            SELECT sl.id FROM public.shopping_lists sl
+            WHERE sl.shared_with_family = true
+            AND sl.owner_id IN (
+                SELECT fm.user_id 
+                FROM public.family_members fm
+                WHERE fm.family_group_id = (
+                    SELECT family_group_id FROM public.profiles WHERE id = auth.uid()
+                )
+                AND fm.status = 'approved'
+            )
+        ))
+    );
+
+-- Allow family members to delete items from family-shared lists
+DROP POLICY IF EXISTS "Users can delete items from their lists" ON public.items;
+
+CREATE POLICY "Users can delete items from own and family-shared lists" ON public.items
+    FOR DELETE USING (
+        -- Items in user's own lists
+        (list_id IN (
+            SELECT id FROM public.shopping_lists
+            WHERE owner_id = auth.uid()
+        ))
+        -- OR items in lists they're a member of
+        OR (list_id IN (
+            SELECT list_id FROM public.list_members
+            WHERE user_id = auth.uid()
+        ))
+        -- OR items in family-shared lists
+        OR (list_id IN (
+            SELECT sl.id FROM public.shopping_lists sl
+            WHERE sl.shared_with_family = true
+            AND sl.owner_id IN (
+                SELECT fm.user_id 
+                FROM public.family_members fm
+                WHERE fm.family_group_id = (
+                    SELECT family_group_id FROM public.profiles WHERE id = auth.uid()
+                )
+                AND fm.status = 'approved'
+            )
+        ))
+    );
+
+-- ===========================================
+-- FUNCTION: Get User Resource Counts (including family-shared)
+-- Returns counts of all accessible resources for quota checking
+-- ===========================================
+CREATE OR REPLACE FUNCTION public.get_user_resource_counts(p_user_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+    v_family_group_id uuid;
+    v_family_member_ids uuid[];
+    v_shopping_lists_count integer;
+    v_total_items_count integer;
+    v_tasks_count integer;
+    v_custom_recipes_count integer;
+BEGIN
+    -- Get user's family group ID
+    SELECT family_group_id INTO v_family_group_id
+    FROM public.profiles
+    WHERE id = p_user_id;
+    
+    -- Get all family member IDs if user is in a family
+    IF v_family_group_id IS NOT NULL THEN
+        SELECT ARRAY_AGG(user_id) INTO v_family_member_ids
+        FROM public.family_members
+        WHERE family_group_id = v_family_group_id
+        AND status = 'approved';
+    ELSE
+        v_family_member_ids := ARRAY[p_user_id];
+    END IF;
+    
+    -- Count shopping lists (owned + family-shared from family members)
+    SELECT COUNT(*) INTO v_shopping_lists_count
+    FROM public.shopping_lists sl
+    WHERE NOT sl.archived
+    AND (
+        sl.owner_id = p_user_id
+        OR (
+            sl.shared_with_family = true
+            AND sl.owner_id = ANY(v_family_member_ids)
+        )
+    );
+    
+    -- Count total items in accessible lists
+    SELECT COUNT(*) INTO v_total_items_count
+    FROM public.items i
+    JOIN public.shopping_lists sl ON sl.id = i.list_id
+    WHERE NOT sl.archived
+    AND (
+        sl.owner_id = p_user_id
+        OR (
+            sl.shared_with_family = true
+            AND sl.owner_id = ANY(v_family_member_ids)
+        )
+    );
+    
+    -- Count tasks (owned + family-shared from family members)
+    SELECT COUNT(*) INTO v_tasks_count
+    FROM public.todos t
+    WHERE t.created_by = (SELECT email FROM public.profiles WHERE id = p_user_id)
+    OR (
+        t.shared_with_family = true
+        AND t.created_by IN (
+            SELECT email FROM public.profiles WHERE id = ANY(v_family_member_ids)
+        )
+    );
+    
+    -- Count custom recipes (all from family members are shared)
+    SELECT COUNT(*) INTO v_custom_recipes_count
+    FROM public.recipes r
+    WHERE r.generated_by_user_id = ANY(v_family_member_ids)
+    AND r.is_user_generated = true;
+    
+    RETURN jsonb_build_object(
+        'shopping_lists', v_shopping_lists_count,
+        'total_items', v_total_items_count,
+        'tasks', v_tasks_count,
+        'custom_recipes', v_custom_recipes_count
+    );
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_user_resource_counts IS 'Returns counts of all resources accessible to user (owned + family-shared)';
+GRANT EXECUTE ON FUNCTION public.get_user_resource_counts(uuid) TO authenticated;
+
+-- ===========================================
+-- HELPER FUNCTION: Get user email (SECURITY DEFINER to avoid RLS recursion)
+-- ===========================================
+CREATE OR REPLACE FUNCTION public.get_user_email(p_user_id uuid)
+RETURNS text
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+    SELECT email FROM public.profiles WHERE id = p_user_id;
+$$;
+
+-- ===========================================
+-- HELPER FUNCTION: Get family member emails (SECURITY DEFINER to avoid RLS recursion)
+-- ===========================================
+CREATE OR REPLACE FUNCTION public.get_family_member_emails(p_user_id uuid)
+RETURNS text[]
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+    v_family_group_id uuid;
+    v_emails text[];
+BEGIN
+    -- Get user's family group
+    SELECT family_group_id INTO v_family_group_id
+    FROM public.profiles
+    WHERE id = p_user_id;
+    
+    IF v_family_group_id IS NULL THEN
+        RETURN ARRAY[]::text[];
+    END IF;
+    
+    -- Get emails of all approved family members
+    SELECT ARRAY_AGG(p.email) INTO v_emails
+    FROM public.family_members fm
+    JOIN public.profiles p ON p.id = fm.user_id
+    WHERE fm.family_group_id = v_family_group_id
+    AND fm.status = 'approved';
+    
+    RETURN COALESCE(v_emails, ARRAY[]::text[]);
+END;
+$$;
+
+-- ===========================================
+-- FIX: Update todos RLS policy to use helper functions (avoid recursion)
+-- ===========================================
+DROP POLICY IF EXISTS "Users can view own and family-shared todos" ON public.todos;
+DROP POLICY IF EXISTS "Users can view own todos" ON public.todos;
+
+CREATE POLICY "Users can view own and family-shared todos" ON public.todos
+    FOR SELECT USING (
+        -- User's own todos
+        created_by = public.get_user_email(auth.uid())
+        -- OR family-shared todos from approved family members
+        OR (
+            shared_with_family = true
+            AND created_by = ANY(public.get_family_member_emails(auth.uid()))
+        )
+    );
+
+-- Also fix UPDATE and DELETE policies to use helper function
+DROP POLICY IF EXISTS "Users can update own todos" ON public.todos;
+DROP POLICY IF EXISTS "Users can delete own todos" ON public.todos;
+DROP POLICY IF EXISTS "Users can update own and family-shared todos" ON public.todos;
+DROP POLICY IF EXISTS "Users can delete own and family-shared todos" ON public.todos;
+
+-- UPDATE: Allow owner OR family members to update family-shared tasks
+CREATE POLICY "Users can update own and family-shared todos" ON public.todos 
+    FOR UPDATE USING (
+        -- Owner can always update their own tasks
+        created_by = public.get_user_email(auth.uid())
+        -- Family members can update family-shared tasks
+        OR (
+            shared_with_family = true
+            AND created_by = ANY(public.get_family_member_emails(auth.uid()))
+        )
+    );
+
+-- DELETE: Allow owner OR family members to delete family-shared tasks
+CREATE POLICY "Users can delete own and family-shared todos" ON public.todos 
+    FOR DELETE USING (
+        -- Owner can always delete their own tasks
+        created_by = public.get_user_email(auth.uid())
+        -- Family members can delete family-shared tasks
+        OR (
+            shared_with_family = true
+            AND created_by = ANY(public.get_family_member_emails(auth.uid()))
+        )
+    );
 
 -- ===========================================
 -- COMPLETE!

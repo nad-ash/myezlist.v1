@@ -5,14 +5,18 @@
  * This ensures that task titles and descriptions are encrypted before being stored
  * in the database, and decrypted when retrieved.
  * 
+ * Encryption key selection:
+ *   - Private tasks: encrypted/decrypted with user's UUID
+ *   - Family-shared tasks: encrypted/decrypted with family_group_id
+ * 
  * Usage:
  *   import { EncryptedTodo } from '@/api/encryptedTodo';
  *   
- *   // Create with encryption
- *   await EncryptedTodo.create(taskData, userId, trackingContext);
+ *   // Create with encryption (pass familyGroupId for family-shared tasks)
+ *   await EncryptedTodo.create(taskData, userId, familyGroupId, trackingContext);
  *   
  *   // Filter with automatic decryption
- *   const tasks = await EncryptedTodo.filter({ created_by: email }, userId, orderBy);
+ *   const tasks = await EncryptedTodo.filter({ created_by: email }, userId, familyGroupId, orderBy);
  * 
  * Unencrypted fields (for database queries/notifications):
  *   - due_date, due_time
@@ -43,18 +47,20 @@ export const EncryptedTodo = {
    * 
    * @param {Object} taskData - Task data (title, description, etc.)
    * @param {string} userId - User's Supabase UUID for encryption key
+   * @param {string|null} familyGroupId - Family group UUID (for family-shared tasks)
    * @param {Object} trackingContext - Activity tracking context
    * @returns {Promise<Object>} - Created task (with encrypted fields in DB)
    */
-  async create(taskData, userId, trackingContext) {
+  async create(taskData, userId, familyGroupId, trackingContext) {
     // Encrypt sensitive fields before storage
-    const encryptedData = await encryptTaskForStorage(taskData, userId);
+    // Family-shared tasks use familyGroupId as key, private tasks use userId
+    const encryptedData = await encryptTaskForStorage(taskData, userId, familyGroupId);
     
     // Create in database
     const result = await Todo.create(encryptedData, trackingContext);
     
     // Return with decrypted fields for immediate UI use
-    return decryptTaskFromStorage(result, userId);
+    return decryptTaskFromStorage(result, userId, familyGroupId);
   },
 
   /**
@@ -63,18 +69,20 @@ export const EncryptedTodo = {
    * @param {string} id - Task ID
    * @param {Object} taskData - Fields to update
    * @param {string} userId - User's Supabase UUID for encryption key
+   * @param {string|null} familyGroupId - Family group UUID (for family-shared tasks)
    * @param {Object} trackingContext - Activity tracking context
    * @returns {Promise<Object>} - Updated task
    */
-  async update(id, taskData, userId, trackingContext) {
-    // Encrypt any sensitive fields being updated
-    const encryptedData = await encryptTaskForStorage(taskData, userId);
+  async update(id, taskData, userId, familyGroupId, trackingContext) {
+    // Encrypt sensitive fields for storage
+    // Family-shared tasks use familyGroupId as key, private tasks use userId
+    const dataToStore = await encryptTaskForStorage(taskData, userId, familyGroupId);
     
     // Update in database
-    const result = await Todo.update(id, encryptedData, trackingContext);
+    const result = await Todo.update(id, dataToStore, trackingContext);
     
     // Return with decrypted fields for immediate UI use
-    return decryptTaskFromStorage(result, userId);
+    return decryptTaskFromStorage(result, userId, familyGroupId);
   },
 
   /**
@@ -82,15 +90,16 @@ export const EncryptedTodo = {
    * 
    * @param {Object} filterObj - Filter criteria (e.g., { created_by: email })
    * @param {string} userId - User's Supabase UUID for decryption key
+   * @param {string|null} familyGroupId - Family group UUID (for family-shared tasks)
    * @param {string} orderBy - Order by field (e.g., '-created_date')
    * @returns {Promise<Array>} - Array of decrypted tasks
    */
-  async filter(filterObj, userId, orderBy) {
+  async filter(filterObj, userId, familyGroupId, orderBy) {
     // Fetch encrypted tasks from database
     const encryptedTasks = await Todo.filter(filterObj, orderBy);
     
     // Decrypt all tasks in parallel
-    return decryptTasks(encryptedTasks, userId);
+    return decryptTasks(encryptedTasks, userId, familyGroupId);
   },
 
   /**
@@ -98,15 +107,16 @@ export const EncryptedTodo = {
    * 
    * @param {string} id - Task ID
    * @param {string} userId - User's Supabase UUID for decryption key
+   * @param {string|null} familyGroupId - Family group UUID (for family-shared tasks)
    * @returns {Promise<Object|null>} - Decrypted task or null if not found
    */
-  async get(id, userId) {
+  async get(id, userId, familyGroupId) {
     // Use filter since SupabaseEntity doesn't have a get() method
     const results = await Todo.filter({ id });
     if (!results || results.length === 0) {
       return null;
     }
-    return decryptTaskFromStorage(results[0], userId);
+    return decryptTaskFromStorage(results[0], userId, familyGroupId);
   },
 
   /**
@@ -125,12 +135,13 @@ export const EncryptedTodo = {
    * Note: This should rarely be used - prefer filter() for user-specific queries
    * 
    * @param {string} userId - User's Supabase UUID for decryption key
+   * @param {string|null} familyGroupId - Family group UUID (for family-shared tasks)
    * @param {string} orderBy - Order by field
    * @returns {Promise<Array>} - Array of decrypted tasks
    */
-  async list(userId, orderBy) {
+  async list(userId, familyGroupId, orderBy) {
     const encryptedTasks = await Todo.list(orderBy);
-    return decryptTasks(encryptedTasks, userId);
+    return decryptTasks(encryptedTasks, userId, familyGroupId);
   },
 
   /**

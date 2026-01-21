@@ -48,6 +48,53 @@ const TIER_CONFIG: Record<string, { monthly_credits: number }> = {
 };
 
 /**
+ * Sync family member tiers when owner subscription changes
+ * Calls the sync_family_member_tiers RPC function
+ */
+async function syncFamilyMemberTiers(
+  supabaseClient: any,
+  ownerId: string,
+  newTier: string
+) {
+  try {
+    console.log(`Syncing family member tiers for owner ${ownerId} to tier ${newTier}`);
+    const { error } = await supabaseClient.rpc("sync_family_member_tiers", {
+      p_owner_id: ownerId,
+      p_new_tier: newTier,
+    });
+
+    if (error) {
+      console.error("Failed to sync family member tiers:", error);
+    } else {
+      console.log(`Family member tiers synced to ${newTier}`);
+    }
+  } catch (err) {
+    console.error("Error syncing family member tiers:", err);
+  }
+}
+
+/**
+ * Reset family credits on billing cycle renewal
+ * Calls the reset_family_credits RPC function
+ */
+async function resetFamilyCredits(supabaseClient: any, ownerId: string) {
+  try {
+    console.log(`Resetting family credits for owner ${ownerId}`);
+    const { error } = await supabaseClient.rpc("reset_family_credits", {
+      p_owner_id: ownerId,
+    });
+
+    if (error) {
+      console.error("Failed to reset family credits:", error);
+    } else {
+      console.log(`Family credits reset for owner ${ownerId}`);
+    }
+  } catch (err) {
+    console.error("Error resetting family credits:", err);
+  }
+}
+
+/**
  * Sync subscription to unified user_subscriptions table
  * This keeps subscriptions from all providers (Stripe, Apple, Google) in sync
  */
@@ -252,6 +299,9 @@ serve(async (req) => {
               ? new Date(subscription.current_period_end * 1000) 
               : null
           });
+          
+          // Sync family member tiers if user is a family owner
+          await syncFamilyMemberTiers(supabaseClient, userId, tier);
         }
         break;
       }
@@ -374,6 +424,10 @@ serve(async (req) => {
               : null,
             cancelledAt: canceledAt ? new Date(canceledAt * 1000) : null
           });
+          
+          // Sync family member tiers based on new tier
+          const newFamilyTier = isCanceled ? "free" : (tier || "free");
+          await syncFamilyMemberTiers(supabaseClient, userId, newFamilyTier);
         }
         break;
       }
@@ -416,6 +470,9 @@ serve(async (req) => {
             currentPeriodEnd: null,
             cancelledAt: new Date()
           });
+          
+          // Downgrade family members to free tier
+          await syncFamilyMemberTiers(supabaseClient, userId, "free");
         }
         break;
       }
@@ -444,6 +501,8 @@ serve(async (req) => {
           .from("profiles")
           .update({
             last_payment_date: new Date().toISOString(),
+            credits_used_this_month: 0, // Reset credits on billing cycle
+            credits_reset_date: new Date().toISOString(),
           })
           .eq("id", userId);
 
@@ -451,6 +510,9 @@ serve(async (req) => {
           console.error(`FAILED to update last_payment_date for user ${userId}:`, updateError);
         } else {
           console.log(`SUCCESS: User ${userId} payment succeeded, last_payment_date updated`);
+          
+          // Reset family credits on billing cycle
+          await resetFamilyCredits(supabaseClient, userId);
         }
         break;
       }

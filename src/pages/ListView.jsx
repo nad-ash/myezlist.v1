@@ -46,6 +46,7 @@ export default function ListViewPage() {
   const [user, setUser] = useState(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [initialItemName, setInitialItemName] = useState(""); // For pre-populating AddItemDialog
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [loading, setLoading] = useState(true);
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -205,7 +206,7 @@ export default function ListViewPage() {
       
       setUser(currentUser);
 
-      // NEW: Check cache for ListMember first
+      // Check cache for ListMember first
       let allMemberships = appCache.getListMemberships(currentUser.id);
       
       if (!allMemberships) {
@@ -217,14 +218,32 @@ export default function ListViewPage() {
       }
       
       const membership = allMemberships.find(m => m.list_id === listId);
+      let isFamilySharedAccess = false;
 
       if (!membership) {
-        setError("You don't have access to this list");
-        setLoading(false);
-        return;
+        // No direct membership - check if this is a family-shared list
+        // Try to fetch the list - RLS will allow access if it's family-shared
+        try {
+          const listCheck = await ShoppingList.get(listId);
+          
+          if (listCheck && listCheck.shared_with_family) {
+            // User has access via family sharing
+            isFamilySharedAccess = true;
+            logger.debug('ListView', 'Access granted via family sharing');
+          } else {
+            setError("You don't have access to this list");
+            setLoading(false);
+            return;
+          }
+        } catch (accessError) {
+          console.error('ListView: Error checking list access:', accessError);
+          setError("You don't have access to this list");
+          setLoading(false);
+          return;
+        }
       }
 
-      if (membership.status === 'pending') {
+      if (membership && membership.status === 'pending') {
         setError("Your access to this list is pending approval from the owner");
         setLoading(false);
         return;
@@ -468,6 +487,23 @@ export default function ListViewPage() {
   const closeDialog = () => {
     setShowAddDialog(false);
     setEditingItem(null);
+    setInitialItemName("");
+  };
+
+  // Handler for opening Add Item dialog with pre-populated name (from insufficient credits flow)
+  const handleOpenManualAdd = async (prefilledName = "") => {
+    // Check tier limits before opening dialog
+    const tierCheck = await canAddItem();
+    if (!tierCheck.canAdd) {
+      setUpgradeTitle("Item Limit Reached");
+      setUpgradeMessage(tierCheck.message);
+      setShowUpgradePrompt(true);
+      return;
+    }
+    
+    setEditingItem(null);
+    setInitialItemName(prefilledName);
+    setShowAddDialog(true);
   };
 
   const handleDeleteList = () => {
@@ -802,7 +838,12 @@ export default function ListViewPage() {
       </div>
 
       {/* Fast Add Input */}
-      <FastAddItemInput listId={listId} existingItems={items} onItemAdded={loadData} />
+      <FastAddItemInput 
+        listId={listId} 
+        existingItems={items} 
+        onItemAdded={loadData} 
+        onOpenManualAdd={handleOpenManualAdd}
+      />
 
       {/* Add Item Button */}
       <Button
@@ -919,6 +960,7 @@ export default function ListViewPage() {
         onSave={editingItem ? handleEditItem : handleAddItem}
         listSections={list.store_sections}
         editItem={editingItem}
+        initialItemName={initialItemName}
       />
       <ShareDialog
         open={showShareDialog}
