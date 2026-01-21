@@ -3,18 +3,21 @@
  * 
  * Provides end-to-end encryption for task (todo) data so that:
  * - Task titles and descriptions are encrypted before storing in the database
- * - Only the authenticated user can decrypt their own tasks
+ * - Only authorized users can decrypt tasks
  * - Due dates remain unencrypted (for notification features)
  * - The server/database never sees plaintext task content
  * 
  * Uses Web Crypto API with AES-GCM for secure client-side encryption.
- * Key is derived from the user's Supabase UUID using PBKDF2.
+ * Key is derived from a UUID using PBKDF2:
+ * - Private tasks: Key derived from user's Supabase UUID
+ * - Family-shared tasks: Key derived from family_group_id (shared by all family members)
  * 
  * Security Properties:
  * - AES-256-GCM provides authenticated encryption (confidentiality + integrity)
  * - Random 12-byte IV per encryption prevents pattern analysis
  * - 100,000 PBKDF2 iterations provide key stretching
- * - Key is tied to user's unique Supabase UUID
+ * - Private task key is tied to user's unique Supabase UUID
+ * - Family task key is tied to family_group_id (accessible to all family members)
  */
 
 const ALGORITHM = 'AES-GCM';
@@ -39,23 +42,23 @@ export function isEncrypted(value) {
 }
 
 /**
- * Derive a cryptographic key from the user's unique ID
+ * Derive a cryptographic key from a UUID (user ID or family group ID)
  * Uses PBKDF2 with SHA-256 for key derivation
  * 
- * @param {string} userId - Supabase user UUID
+ * @param {string} keyId - UUID to derive key from (user ID for private tasks, family_group_id for family tasks)
  * @returns {Promise<CryptoKey>} - AES-GCM key for encryption/decryption
  */
-async function deriveKeyFromUserId(userId) {
-  if (!userId) {
-    throw new Error('User ID is required for encryption key derivation');
+async function deriveKeyFromId(keyId) {
+  if (!keyId) {
+    throw new Error('Key ID is required for encryption key derivation');
   }
 
   const encoder = new TextEncoder();
   
-  // Import user ID as raw key material for PBKDF2
+  // Import key ID as raw key material for PBKDF2
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    encoder.encode(userId),
+    encoder.encode(keyId),
     { name: 'PBKDF2' },
     false,
     ['deriveKey']
@@ -80,10 +83,10 @@ async function deriveKeyFromUserId(userId) {
  * Encrypt a plaintext string
  * 
  * @param {string} plaintext - Text to encrypt
- * @param {string} userId - User's Supabase UUID
+ * @param {string} keyId - UUID to derive encryption key from (user ID or family_group_id)
  * @returns {Promise<string>} - Encrypted data with prefix (ENC:base64)
  */
-export async function encryptField(plaintext, userId) {
+export async function encryptField(plaintext, keyId) {
   // Handle null/undefined/empty values
   if (!plaintext || plaintext.trim() === '') {
     return plaintext;
@@ -94,13 +97,13 @@ export async function encryptField(plaintext, userId) {
     return plaintext;
   }
 
-  if (!userId) {
-    console.warn('No user ID provided for encryption, storing plaintext');
+  if (!keyId) {
+    console.warn('No key ID provided for encryption, storing plaintext');
     return plaintext;
   }
 
   try {
-    const key = await deriveKeyFromUserId(userId);
+    const key = await deriveKeyFromId(keyId);
     const encoder = new TextEncoder();
     
     // Generate random IV for each encryption (critical for security)
@@ -133,10 +136,10 @@ export async function encryptField(plaintext, userId) {
  * Decrypt an encrypted string
  * 
  * @param {string} encryptedData - Encrypted data with ENC: prefix
- * @param {string} userId - User's Supabase UUID
+ * @param {string} keyId - UUID to derive decryption key from (user ID or family_group_id)
  * @returns {Promise<string>} - Decrypted plaintext
  */
-export async function decryptField(encryptedData, userId) {
+export async function decryptField(encryptedData, keyId) {
   // Handle null/undefined/empty values
   if (!encryptedData || encryptedData.trim() === '') {
     return encryptedData;
@@ -147,13 +150,13 @@ export async function decryptField(encryptedData, userId) {
     return encryptedData;
   }
 
-  if (!userId) {
-    console.warn('No user ID provided for decryption');
+  if (!keyId) {
+    console.warn('No key ID provided for decryption');
     return encryptedData;
   }
 
   try {
-    const key = await deriveKeyFromUserId(userId);
+    const key = await deriveKeyFromId(keyId);
     const decoder = new TextDecoder();
     
     // Remove prefix and decode base64
@@ -185,31 +188,44 @@ export async function decryptField(encryptedData, userId) {
  * Only encrypts sensitive fields (title, description)
  * Leaves operational fields unencrypted (due_date, status, priority, etc.)
  * 
- * NOTE: Family-shared tasks are NOT encrypted so family members can read them
+ * Encryption key selection:
+ * - Private tasks: encrypted with user's UUID
+ * - Family-shared tasks: encrypted with family_group_id (all family members can decrypt)
  * 
  * @param {Object} taskData - Task data with plaintext fields
  * @param {string} userId - User's Supabase UUID
+ * @param {string|null} familyGroupId - Family group UUID (required for family-shared tasks)
  * @returns {Promise<Object>} - Task data with encrypted sensitive fields
  */
-export async function encryptTaskForStorage(taskData, userId) {
+export async function encryptTaskForStorage(taskData, userId, familyGroupId = null) {
   if (!taskData) return taskData;
   
   const encrypted = { ...taskData };
   
-  // IMPORTANT: Family-shared tasks are stored unencrypted so family members can read them
-  // This is a trade-off: family-shared = readable by family but less private
+  // Determine which key to use for encryption
+  let encryptionKeyId;
   if (taskData.shared_with_family) {
-    console.log('📝 Task is family-shared, storing unencrypted for family access');
-    return encrypted;
+    if (familyGroupId) {
+      // Family-shared tasks: use family_group_id so all family members can decrypt
+      encryptionKeyId = familyGroupId;
+      console.log('🔐 Encrypting family-shared task with family_group_id');
+    } else {
+      // No family group - user is not in a family, store unencrypted as fallback
+      console.warn('⚠️ Family-shared task but no familyGroupId provided - storing unencrypted');
+      return encrypted;
+    }
+  } else {
+    // Private tasks: use user's UUID
+    encryptionKeyId = userId;
   }
   
-  // Encrypt sensitive fields for private tasks
+  // Encrypt sensitive fields
   if (taskData.title) {
-    encrypted.title = await encryptField(taskData.title, userId);
+    encrypted.title = await encryptField(taskData.title, encryptionKeyId);
   }
   
   if (taskData.description) {
-    encrypted.description = await encryptField(taskData.description, userId);
+    encrypted.description = await encryptField(taskData.description, encryptionKeyId);
   }
   
   // These fields remain unencrypted for database queries and notifications:
@@ -227,22 +243,33 @@ export async function encryptTaskForStorage(taskData, userId) {
 /**
  * Decrypt task fields after loading from database
  * 
+ * Decryption key selection:
+ * - Private tasks: decrypted with user's UUID
+ * - Family-shared tasks: decrypted with family_group_id
+ * 
  * @param {Object} taskData - Task data with encrypted fields
  * @param {string} userId - User's Supabase UUID
+ * @param {string|null} familyGroupId - Family group UUID (required for family-shared tasks)
  * @returns {Promise<Object>} - Task data with decrypted fields
  */
-export async function decryptTaskFromStorage(taskData, userId) {
+export async function decryptTaskFromStorage(taskData, userId, familyGroupId = null) {
   if (!taskData) return taskData;
   
   const decrypted = { ...taskData };
   
+  // Determine which key to use for decryption
+  // Family-shared tasks use family_group_id, private tasks use user's UUID
+  const decryptionKeyId = (taskData.shared_with_family && familyGroupId) 
+    ? familyGroupId 
+    : userId;
+  
   // Decrypt sensitive fields
   if (taskData.title) {
-    decrypted.title = await decryptField(taskData.title, userId);
+    decrypted.title = await decryptField(taskData.title, decryptionKeyId);
   }
   
   if (taskData.description) {
-    decrypted.description = await decryptField(taskData.description, userId);
+    decrypted.description = await decryptField(taskData.description, decryptionKeyId);
   }
   
   return decrypted;
@@ -254,15 +281,16 @@ export async function decryptTaskFromStorage(taskData, userId) {
  * 
  * @param {Array} tasks - Array of encrypted task objects
  * @param {string} userId - User's Supabase UUID
+ * @param {string|null} familyGroupId - Family group UUID (for family-shared tasks)
  * @returns {Promise<Array>} - Array of decrypted task objects
  */
-export async function decryptTasks(tasks, userId) {
+export async function decryptTasks(tasks, userId, familyGroupId = null) {
   if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
     return tasks;
   }
   
   return Promise.all(
-    tasks.map(task => decryptTaskFromStorage(task, userId))
+    tasks.map(task => decryptTaskFromStorage(task, userId, familyGroupId))
   );
 }
 
@@ -271,15 +299,16 @@ export async function decryptTasks(tasks, userId) {
  * 
  * @param {Array} tasks - Array of plaintext task objects
  * @param {string} userId - User's Supabase UUID
+ * @param {string|null} familyGroupId - Family group UUID (for family-shared tasks)
  * @returns {Promise<Array>} - Array of encrypted task objects
  */
-export async function encryptTasks(tasks, userId) {
+export async function encryptTasks(tasks, userId, familyGroupId = null) {
   if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
     return tasks;
   }
   
   return Promise.all(
-    tasks.map(task => encryptTaskForStorage(task, userId))
+    tasks.map(task => encryptTaskForStorage(task, userId, familyGroupId))
   );
 }
 

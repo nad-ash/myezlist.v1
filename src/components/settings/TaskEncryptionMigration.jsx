@@ -4,6 +4,10 @@
  * Shows a simple static message indicating that task encryption is enabled.
  * All new tasks are automatically encrypted with client-side encryption.
  * 
+ * Encryption scheme:
+ * - Private tasks: encrypted with user's UUID (only you can decrypt)
+ * - Family-shared tasks: encrypted with family_group_id (all family members can decrypt)
+ * 
  * Note: This is a simplified version that doesn't check for legacy unencrypted
  * tasks (migration feature removed for performance - checking all tasks on 
  * every Settings page load was unnecessary overhead).
@@ -24,7 +28,7 @@ export default function TaskEncryptionMigration() {
           <div>
             <h3 className="font-semibold text-green-800 dark:text-green-200">Tasks Encrypted</h3>
             <p className="text-sm text-green-600 dark:text-green-400">
-              All your tasks are securely encrypted. Only you can view them.
+              All your tasks are securely encrypted. Private tasks are only visible to you. Family-shared tasks can be read by your family members.
             </p>
           </div>
         </div>
