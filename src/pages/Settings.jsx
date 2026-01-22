@@ -27,10 +27,13 @@ import { createPageUrl } from "@/utils";
 import { createCheckoutSession } from "@/api/functions";
 import { createCustomerPortal } from "@/api/functions";
 import { appCache } from "@/components/utils/appCache";
-import { isNativeApp } from "@/utils/paymentPlatform";
+import { isNativeApp, isIOS, isAndroid } from "@/utils/paymentPlatform";
 import TaskEncryptionMigration from "@/components/settings/TaskEncryptionMigration";
 import FamilySharing from "@/components/settings/FamilySharing";
 import { getUserResourceCounts } from "@/services/familyService";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import NativeSubscription from "@/components/subscription/NativeSubscription";
+import { supabase } from "@/api/supabaseClient";
 
 const tierIcons = {
   free: Package,
@@ -66,6 +69,7 @@ export default function SettingsPage() {
   const [showCancelMessage, setShowCancelMessage] = useState(false);
   const [upgradeDetails, setUpgradeDetails] = useState({ from: '', to: '' });
   const [resourceCounts, setResourceCounts] = useState(null);
+  const [showNativeSubscription, setShowNativeSubscription] = useState(false);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -175,6 +179,13 @@ export default function SettingsPage() {
   const handleUpgrade = async (tierName) => {
     if (upgrading) return;
     
+    // For native apps (iOS/Android), show native subscription dialog with RevenueCat
+    if (isNativeApp()) {
+      setShowNativeSubscription(true);
+      return;
+    }
+    
+    // For web, use Stripe checkout
     setUpgrading(true);
     try {
       // createCheckoutSession handles the redirect internally if data.url is truthy
@@ -196,8 +207,30 @@ export default function SettingsPage() {
     if (managingSubscription) return;
     
     setManagingSubscription(true);
+    
     try {
-      // createCustomerPortal handles the redirect internally if response.url is truthy
+      // For native apps, open the platform's subscription management
+      if (isNativeApp()) {
+        const { Browser } = await import('@capacitor/browser');
+        
+        if (isIOS()) {
+          // Open Apple's subscription management
+          await Browser.open({ 
+            url: 'https://apps.apple.com/account/subscriptions',
+            presentationStyle: 'popover'
+          });
+        } else if (isAndroid()) {
+          // Open Google Play's subscription management
+          await Browser.open({ 
+            url: 'https://play.google.com/store/account/subscriptions',
+            presentationStyle: 'popover'
+          });
+        }
+        setManagingSubscription(false);
+        return;
+      }
+      
+      // For web, use Stripe customer portal
       const response = await createCustomerPortal();
       console.log('Portal response:', response);
       
@@ -210,7 +243,7 @@ export default function SettingsPage() {
       }
       // If portalUrl exists, the redirect was already triggered by createCustomerPortal
     } catch (error) {
-      console.error("Error opening customer portal:", error);
+      console.error("Error opening subscription management:", error);
       alert("Failed to open subscription management. Please try again.");
       setManagingSubscription(false);
     }
@@ -822,6 +855,49 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Native Subscription Dialog (iOS/Android) */}
+      <Dialog open={showNativeSubscription} onOpenChange={setShowNativeSubscription}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogTitle className="sr-only">Upgrade Subscription</DialogTitle>
+          <NativeSubscription
+            user={user}
+            currentTier={user?.subscription_tier}
+            onUpgrade={async (result) => {
+              if (result.success) {
+                setShowNativeSubscription(false);
+                
+                // Sync the native subscription to our backend
+                try {
+                  console.log('📱 Syncing native subscription to backend...');
+                  const { error } = await supabase.functions.invoke('sync-native-subscription', {
+                    body: {
+                      userId: user?.id,
+                      provider: result.provider,
+                      expirationDate: result.expirationDate,
+                      restored: result.restored || false
+                    }
+                  });
+                  
+                  if (error) {
+                    console.error('Error syncing subscription:', error);
+                  } else {
+                    console.log('✅ Subscription synced successfully');
+                  }
+                } catch (syncError) {
+                  console.error('Failed to sync subscription:', syncError);
+                }
+                
+                // Clear cache and reload data to reflect new subscription
+                appCache.clearUser();
+                // Use loadDataWithRetry with isAfterPayment=true to properly refresh
+                await loadDataWithRetry(true, 'premium');
+                setShowSuccessMessage(true);
+              }
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

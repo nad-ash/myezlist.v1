@@ -66,6 +66,21 @@ serve(async (req) => {
 
     console.log(`📱 Syncing ${provider} subscription for user ${user.id}`);
 
+    // Get the premium tier info to get the correct monthly credits
+    const { data: tierData, error: tierError } = await supabaseAdmin
+      .from("subscription_tiers")
+      .select("monthly_credits, max_shopping_lists, max_total_items, max_tasks, max_custom_recipes")
+      .eq("tier_name", "premium")
+      .single();
+
+    if (tierError) {
+      console.error("Failed to get tier info:", tierError);
+      // Continue with default values if tier lookup fails
+    }
+
+    const monthlyCredits = tierData?.monthly_credits || 100;
+    console.log(`📱 Premium tier credits: ${monthlyCredits}`);
+
     // Update or insert subscription record
     const { error: upsertError } = await supabaseAdmin
       .from("user_subscriptions")
@@ -88,17 +103,24 @@ serve(async (req) => {
       );
     }
 
-    // Update user profile tier
+    // Update user profile with tier AND credits from the premium tier
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .update({ 
         subscription_tier: "premium",
-        updated_at: new Date().toISOString()
+        monthly_credits_total: monthlyCredits,
+        subscription_start_date: new Date().toISOString(),
+        updated_date: new Date().toISOString()
       })
       .eq("id", user.id);
 
     if (profileError) {
       console.error("Failed to update profile tier:", profileError);
+      // Return error so the client knows the sync failed
+      return new Response(
+        JSON.stringify({ error: "Failed to update profile subscription tier", details: profileError }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     console.log(`✅ ${restored ? 'Restored' : 'Synced'} ${provider} subscription for user ${user.id}`);
