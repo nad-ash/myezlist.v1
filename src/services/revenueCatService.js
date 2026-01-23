@@ -45,6 +45,42 @@ let Purchases = null;
 let isInitialized = false;
 
 /**
+ * Determine subscription tier and status from RevenueCat entitlements
+ * Centralized logic for tier hierarchy: premium > pro > adfree > free
+ * 
+ * @param {Object} activeEntitlements - The active entitlements from customerInfo
+ * @returns {Object} Tier information with flags and expiration
+ */
+function determineTierFromEntitlements(activeEntitlements) {
+  const hasPremium = activeEntitlements[ENTITLEMENTS.PREMIUM] !== undefined;
+  const hasPro = activeEntitlements[ENTITLEMENTS.PRO] !== undefined;
+  const hasAdfree = activeEntitlements[ENTITLEMENTS.ADFREE] !== undefined;
+  
+  // Determine the active tier (highest wins)
+  let activeTier = 'free';
+  let expirationDate = null;
+  
+  if (hasPremium) {
+    activeTier = 'premium';
+    expirationDate = activeEntitlements[ENTITLEMENTS.PREMIUM]?.expirationDate;
+  } else if (hasPro) {
+    activeTier = 'pro';
+    expirationDate = activeEntitlements[ENTITLEMENTS.PRO]?.expirationDate;
+  } else if (hasAdfree) {
+    activeTier = 'adfree';
+    expirationDate = activeEntitlements[ENTITLEMENTS.ADFREE]?.expirationDate;
+  }
+  
+  return {
+    hasPremium,
+    hasPro,
+    hasAdfree,
+    activeTier,
+    expirationDate
+  };
+}
+
+/**
  * Initialize RevenueCat SDK
  * Should be called once when the app starts
  * @param {string} userId - Optional user ID to identify the customer
@@ -146,34 +182,16 @@ export async function purchasePackage(packageId) {
       aPackage: packageToPurchase 
     });
 
-    // Check which tier the user now has access to
-    const activeEntitlements = customerInfo.entitlements.active;
-    const hasPremium = activeEntitlements[ENTITLEMENTS.PREMIUM] !== undefined;
-    const hasPro = activeEntitlements[ENTITLEMENTS.PRO] !== undefined;
-    const hasAdfree = activeEntitlements[ENTITLEMENTS.ADFREE] !== undefined;
-    
-    // Determine the active tier (highest wins)
-    let activeTier = 'free';
-    let expirationDate = null;
-    if (hasPremium) {
-      activeTier = 'premium';
-      expirationDate = activeEntitlements[ENTITLEMENTS.PREMIUM]?.expirationDate;
-    } else if (hasPro) {
-      activeTier = 'pro';
-      expirationDate = activeEntitlements[ENTITLEMENTS.PRO]?.expirationDate;
-    } else if (hasAdfree) {
-      activeTier = 'adfree';
-      expirationDate = activeEntitlements[ENTITLEMENTS.ADFREE]?.expirationDate;
-    }
+    const tierInfo = determineTierFromEntitlements(customerInfo.entitlements.active);
 
     return {
       success: true,
-      isPremium: hasPremium,
-      isPro: hasPro,
-      isAdfree: hasAdfree,
-      activeTier,
+      isPremium: tierInfo.hasPremium,
+      isPro: tierInfo.hasPro,
+      isAdfree: tierInfo.hasAdfree,
+      activeTier: tierInfo.activeTier,
       customerInfo,
-      expirationDate
+      expirationDate: tierInfo.expirationDate
     };
   } catch (error) {
     // Handle user cancellation gracefully
@@ -203,34 +221,16 @@ export async function restorePurchases() {
   try {
     const { customerInfo } = await Purchases.restorePurchases();
     
-    // Check which tier the user has access to
-    const activeEntitlements = customerInfo.entitlements.active;
-    const hasPremium = activeEntitlements[ENTITLEMENTS.PREMIUM] !== undefined;
-    const hasPro = activeEntitlements[ENTITLEMENTS.PRO] !== undefined;
-    const hasAdfree = activeEntitlements[ENTITLEMENTS.ADFREE] !== undefined;
-    
-    // Determine the active tier (highest wins)
-    let activeTier = 'free';
-    let expirationDate = null;
-    if (hasPremium) {
-      activeTier = 'premium';
-      expirationDate = activeEntitlements[ENTITLEMENTS.PREMIUM]?.expirationDate;
-    } else if (hasPro) {
-      activeTier = 'pro';
-      expirationDate = activeEntitlements[ENTITLEMENTS.PRO]?.expirationDate;
-    } else if (hasAdfree) {
-      activeTier = 'adfree';
-      expirationDate = activeEntitlements[ENTITLEMENTS.ADFREE]?.expirationDate;
-    }
+    const tierInfo = determineTierFromEntitlements(customerInfo.entitlements.active);
 
     return {
       success: true,
-      isPremium: hasPremium,
-      isPro: hasPro,
-      isAdfree: hasAdfree,
-      activeTier,
+      isPremium: tierInfo.hasPremium,
+      isPro: tierInfo.hasPro,
+      isAdfree: tierInfo.hasAdfree,
+      activeTier: tierInfo.activeTier,
       customerInfo,
-      expirationDate
+      expirationDate: tierInfo.expirationDate
     };
   } catch (error) {
     console.error('📦 RevenueCat: Restore failed', error);
@@ -250,27 +250,14 @@ export async function getCustomerInfo() {
   try {
     const { customerInfo } = await Purchases.getCustomerInfo();
     
-    // Check which tier the user has access to
     const activeEntitlements = customerInfo.entitlements.active;
-    const hasPremium = activeEntitlements[ENTITLEMENTS.PREMIUM] !== undefined;
-    const hasPro = activeEntitlements[ENTITLEMENTS.PRO] !== undefined;
-    const hasAdfree = activeEntitlements[ENTITLEMENTS.ADFREE] !== undefined;
-    
-    // Determine the active tier (highest wins)
-    let activeTier = 'free';
-    if (hasPremium) {
-      activeTier = 'premium';
-    } else if (hasPro) {
-      activeTier = 'pro';
-    } else if (hasAdfree) {
-      activeTier = 'adfree';
-    }
+    const tierInfo = determineTierFromEntitlements(activeEntitlements);
     
     return {
-      isPremium: hasPremium,
-      isPro: hasPro,
-      isAdfree: hasAdfree,
-      activeTier,
+      isPremium: tierInfo.hasPremium,
+      isPro: tierInfo.hasPro,
+      isAdfree: tierInfo.hasAdfree,
+      activeTier: tierInfo.activeTier,
       entitlements: activeEntitlements,
       managementUrl: customerInfo.managementURL,
       originalAppUserId: customerInfo.originalAppUserId,
