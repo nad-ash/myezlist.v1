@@ -55,7 +55,7 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { provider, expirationDate, restored } = await req.json();
+    const { provider, expirationDate, restored, tier } = await req.json();
 
     if (!provider || !['apple', 'google'].includes(provider)) {
       return new Response(
@@ -64,13 +64,30 @@ serve(async (req) => {
       );
     }
 
-    console.log(`📱 Syncing ${provider} subscription for user ${user.id}`);
+    // Validate tier (default to 'premium' for backwards compatibility)
+    const validTiers = ['adfree', 'pro', 'premium'];
+    const subscriptionTier = tier && validTiers.includes(tier) ? tier : 'premium';
 
-    // Get the premium tier info to get the correct monthly credits
+    // Validate and sanitize expiration date
+    let validExpirationDate: string | null = null;
+    if (expirationDate) {
+      const parsedDate = new Date(expirationDate);
+      if (!isNaN(parsedDate.getTime())) {
+        validExpirationDate = parsedDate.toISOString();
+      } else {
+        console.warn(`📱 Invalid expiration date format received: ${expirationDate}, using default`);
+      }
+    }
+    // Default to 30 days from now if no valid date provided
+    const finalExpirationDate = validExpirationDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    console.log(`📱 Syncing ${provider} subscription for user ${user.id}, tier: ${subscriptionTier}`);
+
+    // Get the tier info to get the correct monthly credits and limits
     const { data: tierData, error: tierError } = await supabaseAdmin
       .from("subscription_tiers")
       .select("monthly_credits, max_shopping_lists, max_total_items, max_tasks, max_custom_recipes")
-      .eq("tier_name", "premium")
+      .eq("tier_name", subscriptionTier)
       .single();
 
     if (tierError) {
@@ -79,7 +96,7 @@ serve(async (req) => {
     }
 
     const monthlyCredits = tierData?.monthly_credits || 100;
-    console.log(`📱 Premium tier credits: ${monthlyCredits}`);
+    console.log(`📱 ${subscriptionTier} tier credits: ${monthlyCredits}`);
 
     // Update or insert subscription record
     const { error: upsertError } = await supabaseAdmin
@@ -88,8 +105,8 @@ serve(async (req) => {
         user_id: user.id,
         payment_provider: provider,
         status: "active",
-        tier: "premium",
-        current_period_end: expirationDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        tier: subscriptionTier,
+        current_period_end: finalExpirationDate,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: "user_id"
@@ -103,11 +120,11 @@ serve(async (req) => {
       );
     }
 
-    // Update user profile with tier AND credits from the premium tier
+    // Update user profile with the correct tier AND credits
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .update({ 
-        subscription_tier: "premium",
+        subscription_tier: subscriptionTier,
         monthly_credits_total: monthlyCredits,
         subscription_start_date: new Date().toISOString(),
         updated_date: new Date().toISOString()

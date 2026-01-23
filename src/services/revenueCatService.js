@@ -320,19 +320,6 @@ export async function logoutUser() {
 }
 
 /**
- * Check if user has an active paid subscription (any tier)
- * @returns {Promise<boolean>} True if user has any active paid tier
- */
-export async function hasPaidAccess() {
-  try {
-    const info = await getCustomerInfo();
-    return info.isPremium || info.isPro || info.isAdfree;
-  } catch (error) {
-    return false;
-  }
-}
-
-/**
  * Check if user has an active premium subscription
  * @returns {Promise<boolean>} True if user has active premium
  */
@@ -345,19 +332,6 @@ export async function hasPremiumAccess() {
   }
 }
 
-/**
- * Get the user's current subscription tier
- * @returns {Promise<string>} 'premium', 'pro', 'adfree', or 'free'
- */
-export async function getSubscriptionTier() {
-  try {
-    const info = await getCustomerInfo();
-    return info.activeTier;
-  } catch (error) {
-    return 'free';
-  }
-}
-
 export default {
   initializeRevenueCat,
   getProducts,
@@ -366,9 +340,7 @@ export default {
   getCustomerInfo,
   identifyUser,
   logoutUser,
-  hasPaidAccess,
   hasPremiumAccess,
-  getSubscriptionTier,
   PRODUCT_IDS,
   ENTITLEMENTS
 };

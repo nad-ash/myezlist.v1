@@ -867,13 +867,17 @@ export default function SettingsPage() {
               if (result.success) {
                 setShowNativeSubscription(false);
                 
-                // Sync the native subscription to our backend
+                // Get the purchased tier from the result (defaults to 'premium' for backwards compatibility)
+                const purchasedTier = result.activeTier || 'premium';
+                
                 try {
-                  console.log('📱 Syncing native subscription to backend...');
+                  // Sync the native subscription to our backend with the correct tier
+                  console.log(`📱 Syncing native subscription to backend (tier: ${purchasedTier})...`);
                   const { error } = await supabase.functions.invoke('sync-native-subscription', {
                     body: {
                       userId: user?.id,
                       provider: result.provider,
+                      tier: purchasedTier,
                       expirationDate: result.expirationDate,
                       restored: result.restored || false
                     }
@@ -884,15 +888,18 @@ export default function SettingsPage() {
                   } else {
                     console.log('✅ Subscription synced successfully');
                   }
-                } catch (syncError) {
-                  console.error('Failed to sync subscription:', syncError);
+                  
+                  // Clear cache and reload data to reflect new subscription
+                  appCache.clearUser();
+                  // Use loadDataWithRetry with isAfterPayment=true and the actual purchased tier
+                  await loadDataWithRetry(true, purchasedTier);
+                  setShowSuccessMessage(true);
+                } catch (error) {
+                  console.error('Failed to complete subscription sync:', error);
+                  // Still show success since the purchase itself succeeded
+                  // The user has the subscription, we just failed to update the UI
+                  setShowSuccessMessage(true);
                 }
-                
-                // Clear cache and reload data to reflect new subscription
-                appCache.clearUser();
-                // Use loadDataWithRetry with isAfterPayment=true to properly refresh
-                await loadDataWithRetry(true, 'premium');
-                setShowSuccessMessage(true);
               }
             }}
           />
