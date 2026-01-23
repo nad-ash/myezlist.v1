@@ -232,9 +232,16 @@ html.dark nav.fixed.bottom-0,
   padding-bottom: calc(4.5rem + 24px) !important;
 }
 
-/* Scrollable main content area - height must account for header and nav */
+/* Scrollable main content area - height accounts for header and nav */
 .main-scrollable {
   height: calc(100vh - 4rem - 3.5rem - env(safe-area-inset-top, 0px) - 24px) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Scrollable main content area WITHOUT bottom nav (e.g., landing page, login) */
+.main-scrollable-no-nav {
+  height: calc(100vh - 4rem - env(safe-area-inset-top, 0px)) !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
 }

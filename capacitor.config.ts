@@ -22,7 +22,10 @@ const config: CapacitorConfig = {
   },
   android: {
     // Android-specific settings
-    backgroundColor: '#ffffff'
+    backgroundColor: '#ffffff',
+    // Custom URL scheme for OAuth deep linking (myezlist://)
+    // Note: Also requires intent-filter in AndroidManifest.xml
+    scheme: 'myezlist'
   }
 };
 
