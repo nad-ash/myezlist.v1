@@ -76,10 +76,16 @@ export default function NativeSubscription({ user, currentTier, onUpgrade }) {
       const result = await purchasePackage(packageId);
 
       if (result.success) {
-        setCustomerInfo({ isPremium: result.isPremium });
+        setCustomerInfo({ 
+          isPremium: result.isPremium,
+          isPro: result.isPro,
+          isAdfree: result.isAdfree,
+          activeTier: result.activeTier
+        });
         onUpgrade?.({
           success: true,
           provider: isIOS() ? 'apple' : 'google',
+          activeTier: result.activeTier,
           expirationDate: result.expirationDate
         });
       } else if (result.cancelled) {
@@ -100,11 +106,19 @@ export default function NativeSubscription({ user, currentTier, onUpgrade }) {
     try {
       const result = await restorePurchases();
 
-      if (result.isPremium) {
-        setCustomerInfo({ isPremium: true });
+      const hasPaidTier = result.isPremium || result.isPro || result.isAdfree;
+      if (hasPaidTier) {
+        setCustomerInfo({ 
+          isPremium: result.isPremium,
+          isPro: result.isPro,
+          isAdfree: result.isAdfree,
+          activeTier: result.activeTier
+        });
         onUpgrade?.({
           success: true,
           provider: isIOS() ? 'apple' : 'google',
+          activeTier: result.activeTier,
+          expirationDate: result.expirationDate,
           restored: true
         });
       } else {
@@ -129,7 +143,17 @@ export default function NativeSubscription({ user, currentTier, onUpgrade }) {
     );
   }
 
-  if (customerInfo?.isPremium) {
+  // Check if user has any paid subscription
+  const hasPaidSubscription = customerInfo?.isPremium || customerInfo?.isPro || customerInfo?.isAdfree;
+  const activeTier = customerInfo?.activeTier || 'free';
+  
+  const tierLabels = {
+    premium: 'Premium',
+    pro: 'Pro',
+    adfree: 'Ad-Free'
+  };
+
+  if (hasPaidSubscription) {
     return (
       <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20">
         <CardHeader className="text-center">
@@ -137,26 +161,32 @@ export default function NativeSubscription({ user, currentTier, onUpgrade }) {
             <Crown className="w-8 h-8 text-white" />
           </div>
           <CardTitle className="text-green-700 dark:text-green-400">
-            You're a Premium Member!
+            You're a {tierLabels[activeTier] || 'Paid'} Member!
           </CardTitle>
           <CardDescription>
-            Enjoy unlimited access to all features
+            {activeTier === 'premium' && 'Enjoy unlimited access to all features'}
+            {activeTier === 'pro' && 'Enjoy enhanced features and more credits'}
+            {activeTier === 'adfree' && 'Enjoy an ad-free experience'}
           </CardDescription>
         </CardHeader>
         <CardContent className="text-center">
           <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
             <li className="flex items-center justify-center gap-2">
               <Check className="w-4 h-4 text-green-500" />
-              Unlimited shopping lists
-            </li>
-            <li className="flex items-center justify-center gap-2">
-              <Check className="w-4 h-4 text-green-500" />
-              Unlimited AI recipe generation
-            </li>
-            <li className="flex items-center justify-center gap-2">
-              <Check className="w-4 h-4 text-green-500" />
               Ad-free experience
             </li>
+            {(activeTier === 'pro' || activeTier === 'premium') && (
+              <li className="flex items-center justify-center gap-2">
+                <Check className="w-4 h-4 text-green-500" />
+                More shopping lists & items
+              </li>
+            )}
+            {activeTier === 'premium' && (
+              <li className="flex items-center justify-center gap-2">
+                <Check className="w-4 h-4 text-green-500" />
+                Unlimited AI features
+              </li>
+            )}
           </ul>
         </CardContent>
         <CardFooter className="justify-center">

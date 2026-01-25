@@ -195,7 +195,9 @@ export const supabaseAuth = {
       const { Browser } = await import('@capacitor/browser');
       await Browser.open({ 
         url: data.url,
-        windowName: '_self'
+        // Use popover presentation for better mobile experience
+        // Don't use windowName as it can cause issues on Android
+        presentationStyle: 'popover'
       });
     }
 

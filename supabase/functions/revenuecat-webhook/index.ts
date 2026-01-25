@@ -260,7 +260,7 @@ async function updateSubscriptionStatus(
   // Build profile update object
   const profileUpdate: Record<string, unknown> = { 
     subscription_tier: data.tier,
-    updated_at: new Date().toISOString()
+    updated_date: new Date().toISOString()
   };
 
   // Reset credits on renewal

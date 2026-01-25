@@ -25,20 +25,72 @@ const REVENUECAT_API_KEYS = {
   google: import.meta.env.VITE_REVENUECAT_GOOGLE_API_KEY || ''
 };
 
-// Product IDs configured in RevenueCat
+// Product IDs configured in Google Play Console
+// These must match EXACTLY what you've created in Play Console
 export const PRODUCT_IDS = {
-  MONTHLY: 'myezlist_premium_monthly',
-  ANNUAL: 'myezlist_premium_annual'
+  ADFREE_MONTHLY: 'myezlist_adfree_monthly',
+  PRO_MONTHLY: 'myezlist_pro_monthly',
+  PREMIUM_MONTHLY: 'myezlist_premium_monthly'
 };
 
 // Entitlement IDs configured in RevenueCat
+// These map products to access levels in your app
 export const ENTITLEMENTS = {
-  PREMIUM: 'premium',
-  PRO: 'pro'
+  ADFREE: 'adfree',
+  PRO: 'pro',
+  PREMIUM: 'premium'
 };
 
 let Purchases = null;
 let isInitialized = false;
+
+/**
+ * Determine subscription tier and status from RevenueCat entitlements
+ * Centralized logic for tier hierarchy: premium > pro > adfree > free
+ * 
+ * @param {Object} activeEntitlements - The active entitlements from customerInfo (may be null/undefined)
+ * @returns {Object} Tier information with flags and expiration
+ */
+function determineTierFromEntitlements(activeEntitlements) {
+  // Handle null/undefined entitlements gracefully
+  if (!activeEntitlements || typeof activeEntitlements !== 'object') {
+    console.warn('📦 RevenueCat: activeEntitlements is null/undefined, defaulting to free tier');
+    return {
+      hasPremium: false,
+      hasPro: false,
+      hasAdfree: false,
+      activeTier: 'free',
+      expirationDate: null
+    };
+  }
+
+  const hasPremium = activeEntitlements[ENTITLEMENTS.PREMIUM] !== undefined;
+  const hasPro = activeEntitlements[ENTITLEMENTS.PRO] !== undefined;
+  const hasAdfree = activeEntitlements[ENTITLEMENTS.ADFREE] !== undefined;
+  
+  // Determine the active tier (highest wins)
+  let activeTier = 'free';
+  let expirationDate = null;
+  
+  if (hasPremium) {
+    activeTier = 'premium';
+    expirationDate = activeEntitlements[ENTITLEMENTS.PREMIUM]?.expirationDate;
+  } else if (hasPro) {
+    activeTier = 'pro';
+    expirationDate = activeEntitlements[ENTITLEMENTS.PRO]?.expirationDate;
+  } else if (hasAdfree) {
+    activeTier = 'adfree';
+    expirationDate = activeEntitlements[ENTITLEMENTS.ADFREE]?.expirationDate;
+  }
+  
+  return {
+    hasPremium,
+    hasPro,
+    hasAdfree,
+    activeTier,
+    expirationDate
+  };
+}
 
 /**
  * Initialize RevenueCat SDK
@@ -142,14 +194,16 @@ export async function purchasePackage(packageId) {
       aPackage: packageToPurchase 
     });
 
-    // Check if purchase was successful
-    const isPremium = customerInfo.entitlements.active[ENTITLEMENTS.PREMIUM] !== undefined;
+    const tierInfo = determineTierFromEntitlements(customerInfo.entitlements.active);
 
     return {
       success: true,
-      isPremium,
+      isPremium: tierInfo.hasPremium,
+      isPro: tierInfo.hasPro,
+      isAdfree: tierInfo.hasAdfree,
+      activeTier: tierInfo.activeTier,
       customerInfo,
-      expirationDate: customerInfo.entitlements.active[ENTITLEMENTS.PREMIUM]?.expirationDate
+      expirationDate: tierInfo.expirationDate
     };
   } catch (error) {
     // Handle user cancellation gracefully
@@ -179,13 +233,16 @@ export async function restorePurchases() {
   try {
     const { customerInfo } = await Purchases.restorePurchases();
     
-    const isPremium = customerInfo.entitlements.active[ENTITLEMENTS.PREMIUM] !== undefined;
+    const tierInfo = determineTierFromEntitlements(customerInfo.entitlements.active);
 
     return {
       success: true,
-      isPremium,
+      isPremium: tierInfo.hasPremium,
+      isPro: tierInfo.hasPro,
+      isAdfree: tierInfo.hasAdfree,
+      activeTier: tierInfo.activeTier,
       customerInfo,
-      expirationDate: customerInfo.entitlements.active[ENTITLEMENTS.PREMIUM]?.expirationDate
+      expirationDate: tierInfo.expirationDate
     };
   } catch (error) {
     console.error('📦 RevenueCat: Restore failed', error);
@@ -205,9 +262,15 @@ export async function getCustomerInfo() {
   try {
     const { customerInfo } = await Purchases.getCustomerInfo();
     
+    const activeEntitlements = customerInfo.entitlements.active;
+    const tierInfo = determineTierFromEntitlements(activeEntitlements);
+    
     return {
-      isPremium: customerInfo.entitlements.active[ENTITLEMENTS.PREMIUM] !== undefined,
-      entitlements: customerInfo.entitlements.active,
+      isPremium: tierInfo.hasPremium,
+      isPro: tierInfo.hasPro,
+      isAdfree: tierInfo.hasAdfree,
+      activeTier: tierInfo.activeTier,
+      entitlements: activeEntitlements,
       managementUrl: customerInfo.managementURL,
       originalAppUserId: customerInfo.originalAppUserId,
       latestExpirationDate: customerInfo.latestExpirationDate,

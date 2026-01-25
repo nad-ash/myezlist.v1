@@ -142,6 +142,7 @@ serve(async (req) => {
         .from("profiles")
         .update({
           last_refunded_date: new Date().toISOString(),
+          updated_date: new Date().toISOString(),
         })
         .eq("id", userId);
 

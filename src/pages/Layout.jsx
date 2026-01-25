@@ -666,7 +666,7 @@ export default function Layout({ children, currentPageName }) {
             </main>
           </div>
         ) : (
-          <main className={isJoinPage ? "pt-16 main-scrollable" : "pt-16 main-content-pb md:pb-8 main-scrollable"}>
+          <main className="pt-16 main-scrollable-no-nav">
             {children}
           </main>
         )}
