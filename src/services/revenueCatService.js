@@ -48,10 +48,22 @@ let isInitialized = false;
  * Determine subscription tier and status from RevenueCat entitlements
  * Centralized logic for tier hierarchy: premium > pro > adfree > free
  * 
- * @param {Object} activeEntitlements - The active entitlements from customerInfo
+ * @param {Object} activeEntitlements - The active entitlements from customerInfo (may be null/undefined)
  * @returns {Object} Tier information with flags and expiration
  */
 function determineTierFromEntitlements(activeEntitlements) {
+  // Handle null/undefined entitlements gracefully
+  if (!activeEntitlements || typeof activeEntitlements !== 'object') {
+    console.warn('📦 RevenueCat: activeEntitlements is null/undefined, defaulting to free tier');
+    return {
+      hasPremium: false,
+      hasPro: false,
+      hasAdfree: false,
+      activeTier: 'free',
+      expirationDate: null
+    };
+  }
+
   const hasPremium = activeEntitlements[ENTITLEMENTS.PREMIUM] !== undefined;
   const hasPro = activeEntitlements[ENTITLEMENTS.PRO] !== undefined;
   const hasAdfree = activeEntitlements[ENTITLEMENTS.ADFREE] !== undefined;
