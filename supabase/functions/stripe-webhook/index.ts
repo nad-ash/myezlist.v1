@@ -278,6 +278,7 @@ serve(async (req) => {
             credits_used_this_month: 0,
             credits_reset_date: new Date().toISOString(),
             last_payment_date: new Date().toISOString(),
+            updated_date: new Date().toISOString(),
           })
           .eq("id", userId)
           .select();
@@ -378,6 +379,7 @@ serve(async (req) => {
             stripe_subscription_status: "active", // Keep as active (valid DB constraint value)
             subscription_cancel_reason: "pending_cancel", // Use this field to indicate pending cancellation
             subscription_end_date: cancelAtDate, // When it will actually end
+            updated_date: new Date().toISOString(),
             // Keep current tier until period ends
           };
           console.log(`updateData:`, JSON.stringify(updateData));
@@ -391,6 +393,7 @@ serve(async (req) => {
             subscription_cancel_reason: null,
             subscription_end_date: null,
             monthly_credits_total: TIER_CONFIG[tier!]?.monthly_credits || 100,
+            updated_date: new Date().toISOString(),
           };
         } else {
           // Normal update (e.g., plan change)
@@ -399,6 +402,7 @@ serve(async (req) => {
             subscription_tier: tier!,
             stripe_subscription_status: subscription.status,
             monthly_credits_total: TIER_CONFIG[tier!]?.monthly_credits || 100,
+            updated_date: new Date().toISOString(),
           };
         }
 
@@ -453,6 +457,7 @@ serve(async (req) => {
             stripe_subscription_status: "canceled",
             subscription_end_date: new Date().toISOString(),
             monthly_credits_total: 15,
+            updated_date: new Date().toISOString(),
           })
           .eq("id", userId);
 
@@ -503,6 +508,7 @@ serve(async (req) => {
             last_payment_date: new Date().toISOString(),
             credits_used_this_month: 0, // Reset credits on billing cycle
             credits_reset_date: new Date().toISOString(),
+            updated_date: new Date().toISOString(),
           })
           .eq("id", userId);
 
@@ -541,6 +547,7 @@ serve(async (req) => {
           .from("profiles")
           .update({
             stripe_subscription_status: "past_due",
+            updated_date: new Date().toISOString(),
           })
           .eq("id", userId);
 

@@ -118,6 +118,7 @@ export default function NativeSubscription({ user, currentTier, onUpgrade }) {
           success: true,
           provider: isIOS() ? 'apple' : 'google',
           activeTier: result.activeTier,
+          expirationDate: result.expirationDate,
           restored: true
         });
       } else {

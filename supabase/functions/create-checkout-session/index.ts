@@ -86,7 +86,10 @@ serve(async (req) => {
       // Save customer ID to profile (using admin client to bypass RLS)
       const { error: updateError } = await supabaseAdmin
         .from("profiles")
-        .update({ stripe_customer_id: customerId })
+        .update({ 
+          stripe_customer_id: customerId,
+          updated_date: new Date().toISOString(),
+        })
         .eq("id", user.id);
 
       if (updateError) {

@@ -66,27 +66,38 @@ async function verifySubscriptionWithRevenueCat(
     const entitlements = data?.subscriber?.entitlements || {};
     
     // Determine tier from active entitlements (highest wins: premium > pro > adfree)
+    // Check each tier independently to avoid skipping active tiers when an expired tier exists
     let verifiedTier = 'free';
     let expirationDate: string | null = null;
+    const now = new Date();
 
-    if (entitlements[ENTITLEMENTS.PREMIUM]?.expires_date) {
-      const expires = new Date(entitlements[ENTITLEMENTS.PREMIUM].expires_date);
-      if (expires > new Date()) {
-        verifiedTier = 'premium';
-        expirationDate = entitlements[ENTITLEMENTS.PREMIUM].expires_date;
+    // Helper to check if an entitlement is currently active
+    const isActiveEntitlement = (entitlementKey: string): { active: boolean; expires: string | null } => {
+      const entitlement = entitlements[entitlementKey];
+      if (!entitlement?.expires_date) {
+        return { active: false, expires: null };
       }
-    } else if (entitlements[ENTITLEMENTS.PRO]?.expires_date) {
-      const expires = new Date(entitlements[ENTITLEMENTS.PRO].expires_date);
-      if (expires > new Date()) {
-        verifiedTier = 'pro';
-        expirationDate = entitlements[ENTITLEMENTS.PRO].expires_date;
-      }
-    } else if (entitlements[ENTITLEMENTS.ADFREE]?.expires_date) {
-      const expires = new Date(entitlements[ENTITLEMENTS.ADFREE].expires_date);
-      if (expires > new Date()) {
-        verifiedTier = 'adfree';
-        expirationDate = entitlements[ENTITLEMENTS.ADFREE].expires_date;
-      }
+      const expiresAt = new Date(entitlement.expires_date);
+      return { 
+        active: expiresAt > now, 
+        expires: entitlement.expires_date 
+      };
+    };
+
+    // Check tiers in priority order (highest first) - but check ALL of them
+    const premiumStatus = isActiveEntitlement(ENTITLEMENTS.PREMIUM);
+    const proStatus = isActiveEntitlement(ENTITLEMENTS.PRO);
+    const adfreeStatus = isActiveEntitlement(ENTITLEMENTS.ADFREE);
+
+    if (premiumStatus.active) {
+      verifiedTier = 'premium';
+      expirationDate = premiumStatus.expires;
+    } else if (proStatus.active) {
+      verifiedTier = 'pro';
+      expirationDate = proStatus.expires;
+    } else if (adfreeStatus.active) {
+      verifiedTier = 'adfree';
+      expirationDate = adfreeStatus.expires;
     }
 
     console.log(`✅ RevenueCat verified: tier=${verifiedTier}, expires=${expirationDate}`);
