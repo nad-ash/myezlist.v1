@@ -666,10 +666,7 @@ export default function Layout({ children, currentPageName }) {
             </main>
           </div>
         ) : (
-          <main className={cn(
-            "pt-16",
-            showMobileNav ? "main-scrollable main-content-pb md:pb-8" : "main-scrollable-no-nav"
-          )}>
+          <main className="pt-16 main-scrollable-no-nav">
             {children}
           </main>
         )}

@@ -397,82 +397,169 @@ CREATE POLICY "Users can view own profile, admins can view all" ON public.profil
     FOR SELECT USING (((auth.uid() = id) OR is_admin()));
 
 -- ===========================================
+-- HELPER FUNCTIONS (SECURITY DEFINER to bypass RLS and avoid recursion)
+-- ===========================================
+
+-- Function to check if user owns a list
+CREATE OR REPLACE FUNCTION public.user_owns_list(p_list_id uuid, p_user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.shopping_lists
+        WHERE id = p_list_id
+        AND owner_id = p_user_id
+    );
+$$;
+
+-- Function to check if user is a list member (two param version)
+CREATE OR REPLACE FUNCTION public.user_is_list_member(p_list_id uuid, p_user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.list_members
+        WHERE list_id = p_list_id
+        AND user_id = p_user_id
+    );
+$$;
+
+-- Function to check if current user is a list member (single param version)
+CREATE OR REPLACE FUNCTION public.is_list_member(p_list_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.list_members
+        WHERE list_id = p_list_id
+        AND user_id = auth.uid()
+    );
+$$;
+
+-- Function to get all family member user IDs for a user
+CREATE OR REPLACE FUNCTION public.get_user_family_member_ids(p_user_id uuid)
+RETURNS SETOF uuid
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+    SELECT fm.user_id 
+    FROM public.family_members fm
+    WHERE fm.family_group_id = (
+        SELECT family_group_id FROM public.profiles WHERE id = p_user_id
+    )
+    AND fm.status = 'approved';
+$$;
+
+-- ===========================================
 -- RLS POLICIES: shopping_lists
 -- ===========================================
 CREATE POLICY "Users can create lists" ON public.shopping_lists 
-    FOR INSERT WITH CHECK ((owner_id = auth.uid()));
+    FOR INSERT WITH CHECK (owner_id = auth.uid());
 
 CREATE POLICY "Users can delete own lists" ON public.shopping_lists 
-    FOR DELETE USING ((owner_id = auth.uid()));
+    FOR DELETE USING (owner_id = auth.uid());
 
 CREATE POLICY "Users can update own lists" ON public.shopping_lists 
-    FOR UPDATE USING ((owner_id = auth.uid()));
+    FOR UPDATE USING (owner_id = auth.uid());
 
-CREATE POLICY "Users can view own lists" ON public.shopping_lists 
-    FOR SELECT USING (((owner_id = auth.uid()) OR (id IN ( SELECT list_members.list_id
-       FROM public.list_members
-      WHERE (list_members.user_id = auth.uid())))));
+CREATE POLICY "Users can view own and family-shared lists" ON public.shopping_lists
+    FOR SELECT
+    USING (
+        (owner_id = auth.uid())
+        OR user_is_list_member(id, auth.uid())
+        OR (
+            shared_with_family = true
+            AND owner_id IN (SELECT get_user_family_member_ids(auth.uid()))
+        )
+    );
+
+CREATE POLICY "Users can view shared lists" ON public.shopping_lists
+    FOR SELECT
+    USING (is_list_member(id));
 
 -- ===========================================
 -- RLS POLICIES: items
 -- ===========================================
-CREATE POLICY "Users can add items to their lists" ON public.items 
-    FOR INSERT WITH CHECK (((list_id IN ( SELECT shopping_lists.id
-       FROM public.shopping_lists
-      WHERE (shopping_lists.owner_id = auth.uid()))) OR (list_id IN ( SELECT list_members.list_id
-       FROM public.list_members
-      WHERE (list_members.user_id = auth.uid())))));
+CREATE POLICY "Users can add items to own and family-shared lists" ON public.items
+    FOR INSERT
+    WITH CHECK (
+        user_owns_list(list_id, auth.uid()) 
+        OR user_is_list_member(list_id, auth.uid()) 
+        OR (list_id IN (
+            SELECT id FROM public.shopping_lists
+            WHERE shared_with_family = true
+            AND owner_id IN (SELECT get_user_family_member_ids(auth.uid()))
+        ))
+    );
 
-CREATE POLICY "Users can delete items from their lists" ON public.items 
-    FOR DELETE USING (((list_id IN ( SELECT shopping_lists.id
-       FROM public.shopping_lists
-      WHERE (shopping_lists.owner_id = auth.uid()))) OR (list_id IN ( SELECT list_members.list_id
-       FROM public.list_members
-      WHERE (list_members.user_id = auth.uid())))));
+CREATE POLICY "Users can delete items from own and family-shared lists" ON public.items
+    FOR DELETE
+    USING (
+        user_owns_list(list_id, auth.uid()) 
+        OR user_is_list_member(list_id, auth.uid()) 
+        OR (list_id IN (
+            SELECT id FROM public.shopping_lists
+            WHERE shared_with_family = true
+            AND owner_id IN (SELECT get_user_family_member_ids(auth.uid()))
+        ))
+    );
 
-CREATE POLICY "Users can update items in their lists" ON public.items 
-    FOR UPDATE USING (((list_id IN ( SELECT shopping_lists.id
-       FROM public.shopping_lists
-      WHERE (shopping_lists.owner_id = auth.uid()))) OR (list_id IN ( SELECT list_members.list_id
-       FROM public.list_members
-      WHERE (list_members.user_id = auth.uid())))));
+CREATE POLICY "Users can update items in own and family-shared lists" ON public.items
+    FOR UPDATE
+    USING (
+        user_owns_list(list_id, auth.uid()) 
+        OR user_is_list_member(list_id, auth.uid()) 
+        OR (list_id IN (
+            SELECT id FROM public.shopping_lists
+            WHERE shared_with_family = true
+            AND owner_id IN (SELECT get_user_family_member_ids(auth.uid()))
+        ))
+    );
 
-CREATE POLICY "Users can view items in their lists" ON public.items 
-    FOR SELECT USING (((list_id IN ( SELECT shopping_lists.id
-       FROM public.shopping_lists
-      WHERE (shopping_lists.owner_id = auth.uid()))) OR (list_id IN ( SELECT list_members.list_id
-       FROM public.list_members
-      WHERE (list_members.user_id = auth.uid())))));
+CREATE POLICY "Users can view items in own and family-shared lists" ON public.items
+    FOR SELECT
+    USING (
+        user_owns_list(list_id, auth.uid()) 
+        OR user_is_list_member(list_id, auth.uid()) 
+        OR (list_id IN (
+            SELECT id FROM public.shopping_lists
+            WHERE shared_with_family = true
+            AND owner_id IN (SELECT get_user_family_member_ids(auth.uid()))
+        ))
+    );
 
 -- ===========================================
 -- RLS POLICIES: list_members
 -- ===========================================
 CREATE POLICY "List owners can manage members" ON public.list_members 
-    FOR INSERT WITH CHECK ((list_id IN ( SELECT shopping_lists.id
-       FROM public.shopping_lists
-      WHERE (shopping_lists.owner_id = auth.uid()))));
+    FOR INSERT 
+    WITH CHECK (user_owns_list(list_id, auth.uid()));
 
 -- NOTE: Direct INSERT via share link is NOT allowed due to security concerns.
 -- Users must use the join_list_via_share_token() RPC function which validates the token server-side.
--- The old "Users can request to join via share link" policy was removed because it only checked
--- if a list had ANY active share link, not that the user possessed the actual token.
--- An attacker could enumerate list_ids from share_links and create membership requests
--- without having the actual share token.
 
 CREATE POLICY "List owners can remove members" ON public.list_members 
-    FOR DELETE USING (((list_id IN ( SELECT shopping_lists.id
-       FROM public.shopping_lists
-      WHERE (shopping_lists.owner_id = auth.uid()))) OR (user_id = auth.uid())));
+    FOR DELETE 
+    USING (user_owns_list(list_id, auth.uid()) OR (user_id = auth.uid()));
 
 CREATE POLICY "List owners can update members" ON public.list_members 
-    FOR UPDATE USING ((list_id IN ( SELECT shopping_lists.id
-       FROM public.shopping_lists
-      WHERE (shopping_lists.owner_id = auth.uid()))));
+    FOR UPDATE 
+    USING (user_owns_list(list_id, auth.uid()));
 
 CREATE POLICY "Users can view members of their lists" ON public.list_members 
-    FOR SELECT USING (((list_id IN ( SELECT shopping_lists.id
-       FROM public.shopping_lists
-      WHERE (shopping_lists.owner_id = auth.uid()))) OR (user_id = auth.uid())));
+    FOR SELECT 
+    USING (user_owns_list(list_id, auth.uid()) OR (user_id = auth.uid()));
 
 -- ===========================================
 -- RLS POLICIES: share_links

@@ -862,7 +862,6 @@ export default function SettingsPage() {
           <DialogTitle className="sr-only">Upgrade Subscription</DialogTitle>
           <NativeSubscription
             user={user}
-            currentTier={user?.subscription_tier}
             onUpgrade={async (result) => {
               if (result.success) {
                 setShowNativeSubscription(false);
