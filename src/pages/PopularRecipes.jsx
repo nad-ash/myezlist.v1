@@ -378,7 +378,7 @@ Do NOT use "description", "step_number", "name", or any other property names for
         <TabsContent value="browse" className="space-y-6">
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <Input placeholder="Search recipes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 h-12" />
+            <Input placeholder="Search recipes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 h-12" maxLength={100} />
           </div>
 
           {availableCuisines.length > 1 && (
@@ -535,7 +535,7 @@ Do NOT use "description", "step_number", "name", or any other property names for
                 <CardContent className="p-6">
                   <div className="flex flex-col gap-3">
                     <Input placeholder="e.g., Chocolate Chip Cookies..." value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)} disabled={generating} className="text-lg h-12" />
+                      onChange={(e) => setSearchTerm(e.target.value)} disabled={generating} className="text-lg h-12" maxLength={100} />
                     <Button onClick={handleGenerateRecipe} disabled={generating || !searchTerm.trim()}
                       className="h-12 bg-orange-600 hover:bg-orange-700">
                       {generating ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Creating Magic...</> : <><Sparkles className="w-5 h-5 mr-2" />Generate</> }
@@ -556,15 +556,15 @@ Do NOT use "description", "step_number", "name", or any other property names for
                 <div className="space-y-2">
                   <Label className="text-base font-semibold">Dish Name *</Label>
                   <Input placeholder="e.g., Grandma's Apple Pie" value={manualRecipe.full_title}
-                    onChange={(e) => setManualRecipe({ ...manualRecipe, full_title: e.target.value })} className="h-12" />
+                    onChange={(e) => setManualRecipe({ ...manualRecipe, full_title: e.target.value })} className="h-12" maxLength={100} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div><Label>Cooking Time</Label><Input placeholder="30-45 minutes" value={manualRecipe.cooking_time} onChange={(e) => setManualRecipe({ ...manualRecipe, cooking_time: e.target.value })} /></div>
+                  <div><Label>Cooking Time</Label><Input placeholder="30-45 minutes" value={manualRecipe.cooking_time} onChange={(e) => setManualRecipe({ ...manualRecipe, cooking_time: e.target.value })} maxLength={30} /></div>
                   <div><Label>Cuisine</Label><select value={manualRecipe.cuisine} onChange={(e) => setManualRecipe({ ...manualRecipe, cuisine: e.target.value })} className="w-full h-10 px-3 rounded-md border">
                     {allCuisines.map(c => <option key={c} value={c}>{c}</option>)}
                   </select></div>
                   <div><Label>Servings</Label><Input type="number" min="1" value={manualRecipe.servings} onChange={(e) => setManualRecipe({ ...manualRecipe, servings: parseInt(e.target.value) || 4 })} /></div>
-                  <div><Label>Calories/Serving</Label><Input placeholder="350-400 cal" value={manualRecipe.calories_per_serving} onChange={(e) => setManualRecipe({ ...manualRecipe, calories_per_serving: e.target.value })} /></div>
+                  <div><Label>Calories/Serving</Label><Input placeholder="350-400 cal" value={manualRecipe.calories_per_serving} onChange={(e) => setManualRecipe({ ...manualRecipe, calories_per_serving: e.target.value })} maxLength={20} /></div>
                 </div>
                 
                 {/* Image section */}
@@ -612,7 +612,7 @@ Do NOT use "description", "step_number", "name", or any other property names for
                   <div className="space-y-2">
                     {manualRecipe.ingredients.map((ing, idx) => (
                       <div key={idx} className="flex gap-2">
-                        <Input placeholder="e.g., 2 cups flour" value={ing} onChange={(e) => { const n = [...manualRecipe.ingredients]; n[idx] = e.target.value; setManualRecipe({ ...manualRecipe, ingredients: n }); }} className="flex-1" />
+                        <Input placeholder="e.g., 2 cups flour" value={ing} onChange={(e) => { const n = [...manualRecipe.ingredients]; n[idx] = e.target.value; setManualRecipe({ ...manualRecipe, ingredients: n }); }} className="flex-1" maxLength={200} />
                         {manualRecipe.ingredients.length > 1 && <Button onClick={() => setManualRecipe({ ...manualRecipe, ingredients: manualRecipe.ingredients.filter((_, i) => i !== idx) })} size="icon" variant="ghost" className="text-red-500"><Trash2 className="w-4 h-4" /></Button>}
                       </div>
                     ))}
@@ -628,10 +628,10 @@ Do NOT use "description", "step_number", "name", or any other property names for
                         <CardContent className="p-3 space-y-2">
                           <div className="flex gap-2">
                             <Badge className="bg-orange-500">Step {idx + 1}</Badge>
-                            <Input placeholder="Step title..." value={step.title} onChange={(e) => { const n = [...manualRecipe.steps]; n[idx].title = e.target.value; setManualRecipe({ ...manualRecipe, steps: n }); }} className="flex-1" />
+                            <Input placeholder="Step title..." value={step.title} onChange={(e) => { const n = [...manualRecipe.steps]; n[idx].title = e.target.value; setManualRecipe({ ...manualRecipe, steps: n }); }} className="flex-1" maxLength={100} />
                             {manualRecipe.steps.length > 1 && <Button onClick={() => setManualRecipe({ ...manualRecipe, steps: manualRecipe.steps.filter((_, i) => i !== idx) })} size="icon" variant="ghost" className="text-red-500"><Trash2 className="w-4 h-4" /></Button>}
                           </div>
-                          <Textarea placeholder="Step instructions..." value={step.instruction} onChange={(e) => { const n = [...manualRecipe.steps]; n[idx].instruction = e.target.value; setManualRecipe({ ...manualRecipe, steps: n }); }} rows={2} />
+                          <Textarea placeholder="Step instructions..." value={step.instruction} onChange={(e) => { const n = [...manualRecipe.steps]; n[idx].instruction = e.target.value; setManualRecipe({ ...manualRecipe, steps: n }); }} rows={2} maxLength={2000} />
                         </CardContent>
                       </Card>
                     ))}

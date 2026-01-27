@@ -1359,7 +1359,8 @@ Return JSON with an array of objects, each containing:
                                 value={item.item}
                                 onChange={(e) => handleUpdateImportItem(item.id, 'item', e.target.value)}
                                 placeholder="Item name"
-                                className="!bg-white dark:!bg-slate-700 !text-slate-800 dark:!text-slate-100 !border-slate-300 dark:!border-slate-600 text-sm flex-1" />
+                                className="!bg-white dark:!bg-slate-700 !text-slate-800 dark:!text-slate-100 !border-slate-300 dark:!border-slate-600 text-sm flex-1"
+                                maxLength={50} />
 
                             </div>
                             <div className="flex items-center gap-2">
@@ -1374,7 +1375,8 @@ Return JSON with an array of objects, each containing:
                                   includeQuantities ?
                                     "!bg-white dark:!bg-slate-700 !text-slate-800 dark:!text-slate-100 !border-slate-300 dark:!border-slate-600" :
                                     "!bg-slate-100 dark:!bg-slate-900 !text-slate-400 dark:!text-slate-500 !border-slate-200 dark:!border-slate-800"
-                                )} />
+                                )}
+                                maxLength={20} />
 
                             </div>
                           </div>
@@ -1387,7 +1389,8 @@ Return JSON with an array of objects, each containing:
                                 value={item.item}
                                 onChange={(e) => handleUpdateImportItem(item.id, 'item', e.target.value)}
                                 placeholder="Item name"
-                                className="!bg-white dark:!bg-slate-700 !text-slate-800 dark:!text-slate-100 !border-slate-300 dark:!border-slate-600 text-sm" />
+                                className="!bg-white dark:!bg-slate-700 !text-slate-800 dark:!text-slate-100 !border-slate-300 dark:!border-slate-600 text-sm"
+                                maxLength={50} />
 
                             </div>
                             <div className="col-span-1">
@@ -1402,7 +1405,8 @@ Return JSON with an array of objects, each containing:
                                   includeQuantities ?
                                     "!bg-white dark:!bg-slate-700 !text-slate-800 dark:!text-slate-100 !border-slate-300 dark:!border-slate-600" :
                                     "!bg-slate-100 dark:!bg-slate-900 !text-slate-400 dark:!text-slate-500 !border-slate-200 dark:!border-slate-800"
-                                )} />
+                                )}
+                                maxLength={20} />
 
                             </div>
                           </div>
@@ -1482,7 +1486,8 @@ Return JSON with an array of objects, each containing:
                             placeholder={`${recipe.full_title} Shopping`}
                             value={newListName}
                             onChange={(e) => setNewListName(e.target.value)}
-                            className="!bg-white dark:!bg-slate-700 !text-slate-800 dark:!text-slate-100 !border-slate-300 dark:!border-slate-600" />
+                            className="!bg-white dark:!bg-slate-700 !text-slate-800 dark:!text-slate-100 !border-slate-300 dark:!border-slate-600"
+                            maxLength={50} />
 
                         }
                       </div>
@@ -1565,7 +1570,8 @@ Return JSON with an array of objects, each containing:
         value={displayRecipe.full_title}
         onChange={(e) => setEditedRecipe({ ...editedRecipe, full_title: e.target.value })}
         placeholder="Dish name..."
-        className="text-lg sm:text-2xl font-bold bg-white/90 text-slate-800 border-none" />
+        className="text-lg sm:text-2xl font-bold bg-white/90 text-slate-800 border-none"
+        maxLength={100} />
 
         </div> :
 
@@ -1806,7 +1812,8 @@ Return JSON with an array of objects, each containing:
                               value={ingredientText}
                               onChange={(e) => updateIngredient(idx, e.target.value)}
                               placeholder="e.g., 2 cups all-purpose flour"
-                              className="flex-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700" />
+                              className="flex-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700"
+                              maxLength={200} />
 
                             <Button
                               onClick={() => removeIngredient(idx)}
@@ -1887,7 +1894,8 @@ Return JSON with an array of objects, each containing:
                                 value={normalizedStep.title}
                                 onChange={(e) => updateStep(idx, 'title', e.target.value)}
                                 placeholder="Step title..."
-                                className="flex-1 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600" />
+                                className="flex-1 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600"
+                                maxLength={100} />
 
                               <Button
                                 onClick={() => removeStep(idx)}
@@ -1903,7 +1911,8 @@ Return JSON with an array of objects, each containing:
                               onChange={(e) => updateStep(idx, 'instruction', e.target.value)}
                               placeholder="Step instructions..."
                               rows={3}
-                              className="w-full bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600" />
+                              className="w-full bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600"
+                              maxLength={2000} />
 
                           </CardContent>
                         </Card>);

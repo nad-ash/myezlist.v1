@@ -803,6 +803,7 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
             onChange={(e) => setRawText(e.target.value)}
             className="min-h-[200px] mb-4 font-mono dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700"
             disabled={isOrganizing}
+            maxLength={2500}
           />
 
           <Button
@@ -866,6 +867,7 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
                     value={item.name}
                     onChange={(e) => handleEditItem(item.id, e.target.value)}
                     className="flex-1 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-600 focus-visible:ring-blue-500 dark:focus-visible:ring-blue-400"
+                    maxLength={50}
                   />
                   <Button
                     variant="ghost"
@@ -1021,6 +1023,7 @@ Return a JSON object where each key is the EXACT item name (as shown above) and 
                     value={newListName}
                     onChange={(e) => setNewListName(e.target.value)}
                     className="bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                    maxLength={50}
                   />
                 )}
               </div>

@@ -402,6 +402,7 @@ export default function FastAddItemInput({ listId, existingItems = [], onItemAdd
             onKeyDown={(e) => e.key === 'Enter' && !isFastAdding && handleAddItem()}
             disabled={isFastAdding}
             className="h-9 text-sm dark:bg-slate-700 dark:text-white dark:border-slate-600"
+            maxLength={50}
           />
           
           {showSuggestions && suggestions.length > 0 && (

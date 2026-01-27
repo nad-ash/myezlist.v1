@@ -251,6 +251,7 @@ export default function Login() {
                         onChange={(e) => setSignInEmail(e.target.value)}
                         className="pl-10 dark:bg-slate-700 dark:border-slate-600"
                         required
+                        maxLength={100}
                       />
                     </div>
                   </div>
@@ -267,6 +268,7 @@ export default function Login() {
                         onChange={(e) => setSignInPassword(e.target.value)}
                         className="pl-10 pr-10 dark:bg-slate-700 dark:border-slate-600"
                         required
+                        maxLength={128}
                       />
                       <button
                         type="button"
@@ -320,6 +322,7 @@ export default function Login() {
                         onChange={(e) => setSignUpFullName(e.target.value)}
                         className="pl-10 dark:bg-slate-700 dark:border-slate-600"
                         required
+                        maxLength={50}
                       />
                     </div>
                   </div>
@@ -336,6 +339,7 @@ export default function Login() {
                         onChange={(e) => setSignUpEmail(e.target.value)}
                         className="pl-10 dark:bg-slate-700 dark:border-slate-600"
                         required
+                        maxLength={100}
                       />
                     </div>
                   </div>
@@ -353,6 +357,7 @@ export default function Login() {
                         className="pl-10 pr-10 dark:bg-slate-700 dark:border-slate-600"
                         required
                         minLength={6}
+                        maxLength={128}
                       />
                       <button
                         type="button"
@@ -377,6 +382,7 @@ export default function Login() {
                         className="pl-10 dark:bg-slate-700 dark:border-slate-600"
                         required
                         minLength={6}
+                        maxLength={128}
                       />
                     </div>
                   </div>
