@@ -22,7 +22,7 @@
  * - GPT-5 series (gpt-5-mini, gpt-5-nano) - only support default (1)
  * 
  * OpenAI Specific Settings:
- * - max_completion_tokens: 2500
+ * - max_completion_tokens: 4096
  * - reasoning_effort: "low" (for reasoning models: o1, o3, and GPT-5 series)
  * 
  * You can override the default by passing an explicit temperature parameter.
@@ -188,7 +188,7 @@ async function invokeLLM_OpenAI(prompt: string, responseJsonSchema: object | nul
     model,
     messages,
     response_format: responseJsonSchema ? { type: "json_object" } : undefined,
-    max_completion_tokens: 2500,
+    max_completion_tokens: 4096,
   };
 
   // Add reasoning_effort for models that support it
@@ -265,7 +265,7 @@ async function invokeLLM_Gemini(prompt: string, responseJsonSchema: object | nul
     ],
     generationConfig: {
       temperature: effectiveTemperature,
-      maxOutputTokens: 2000,
+      maxOutputTokens: 4096,
       responseMimeType: responseJsonSchema ? "application/json" : "text/plain",
     },
   };

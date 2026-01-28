@@ -442,6 +442,7 @@ export default function FamilySharing({ userTier = 'free', maxFamilyMembers = 0 
                   borderColor: isDarkMode ? 'rgb(71 85 105)' : '',
                   color: isDarkMode ? 'rgb(241 245 249)' : ''
                 }}
+                maxLength={50}
               />
             </div>
             <DialogFooter>
@@ -917,6 +918,7 @@ export default function FamilySharing({ userTier = 'free', maxFamilyMembers = 0 
                   borderColor: isDarkMode ? 'rgb(71 85 105)' : '',
                   color: isDarkMode ? 'rgb(241 245 249)' : ''
                 }}
+                maxLength={100}
               />
               <p 
                 className="text-xs mt-1"
